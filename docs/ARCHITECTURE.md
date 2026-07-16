@@ -26,7 +26,7 @@ supabase/schema.sql       Source de vérité de la base : tables, types,
                            fonctions RPC, policies RLS. Idempotent —
                            peut être ré-exécuté dans le SQL Editor.
 src/lib/supabase.ts        Client Supabase (URL + clé anon publiques).
-src/app/page.tsx           Exemple d'appel RPC (health_check).
+src/app/page.tsx           Exemple de lecture directe (table organizations).
 ```
 
 ## Ajouter une fonctionnalité

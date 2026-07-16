@@ -19,7 +19,7 @@ export default function Home() {
   useEffect(() => {
     async function check() {
       try {
-        const { error } = await supabase.rpc("health_check");
+        const { error } = await supabase.from("organizations").select("id").limit(1);
         setStatus(error ? "unreachable" : "ok");
       } catch {
         setStatus("unreachable");
