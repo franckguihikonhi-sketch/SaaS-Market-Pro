@@ -1,57 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { supabase } from "@/lib/supabase";
-
-type Status = "checking" | "ok" | "unreachable";
+import { useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { buttonVariants } from "@/components/ui/button";
+import { useSession } from "@/lib/use-session";
 
 export default function Home() {
-  const [status, setStatus] = useState<Status>("checking");
+  const router = useRouter();
+  const { session, loading } = useSession();
 
   useEffect(() => {
-    async function check() {
-      try {
-        const { error } = await supabase.from("organizations").select("id").limit(1);
-        setStatus(error ? "unreachable" : "ok");
-      } catch {
-        setStatus("unreachable");
-      }
-    }
-    void check();
-  }, []);
+    if (!loading && session) router.push("/dashboard");
+  }, [loading, session, router]);
+
+  if (loading || session) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/30 p-8">
+        <p className="text-muted-foreground">Chargement…</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-muted/30 p-8">
-      <div className="flex flex-col items-center gap-2 text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted/30 p-8 text-center">
+      <div className="flex flex-col items-center gap-2">
         <h1 className="text-3xl font-semibold tracking-tight">Market-Pro</h1>
-        <p className="text-muted-foreground">
-          SaaS de caisse enregistreuse — connecté directement à Supabase
+        <p className="max-w-md text-muted-foreground">
+          SaaS de caisse enregistreuse professionnelle — pour les petites
+          boutiques comme pour les supermarchés multi-magasins.
         </p>
       </div>
-
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>État de la base de données</CardTitle>
-          <CardDescription>Supabase (PostgreSQL + Auth + RLS)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Badge variant={status === "ok" ? "default" : "destructive"}>
-            {status === "checking"
-              ? "vérification…"
-              : status === "ok"
-                ? "connectée"
-                : "indisponible"}
-          </Badge>
-        </CardContent>
-      </Card>
+      <div className="flex gap-3">
+        <Link href="/signup" className={buttonVariants({ variant: "default" })}>
+          Créer une organisation
+        </Link>
+        <Link href="/login" className={buttonVariants({ variant: "outline" })}>
+          Se connecter
+        </Link>
+      </div>
     </div>
   );
 }

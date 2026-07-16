@@ -279,3 +279,48 @@ create policy "admin write" on units for all using (
 create policy "admin write" on products for all using (
   organization_id = my_organization_id() and my_role() in ('admin', 'manager', 'super_admin')
 );
+
+-- Un admin peut modifier le rôle des collègues de son organisation
+-- (jamais le sien, pour éviter de se retirer ses propres droits par erreur).
+create policy "admin update profiles" on profiles for update using (
+  organization_id = my_organization_id()
+  and my_role() in ('admin', 'super_admin')
+  and id <> auth.uid()
+);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- PHASE 2 : PROVISIONING AUTOMATIQUE À L'INSCRIPTION
+-- ─────────────────────────────────────────────────────────────────────────
+-- Chaque inscription (supabase.auth.signUp) crée sa propre organisation et
+-- devient automatiquement administrateur de celle-ci — modèle SaaS
+-- self-serve standard. organization_name/full_name sont lus depuis les
+-- métadonnées passées à signUp (options.data).
+
+create or replace function handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  v_org_id uuid;
+  v_org_name text;
+begin
+  v_org_name := coalesce(nullif(trim(new.raw_user_meta_data->>'organization_name'), ''), 'Mon organisation');
+
+  insert into organizations (name, slug)
+  values (v_org_name, 'org-' || replace(new.id::text, '-', ''))
+  returning id into v_org_id;
+
+  insert into profiles (id, organization_id, full_name, role)
+  values (
+    new.id,
+    v_org_id,
+    coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'), ''), new.email),
+    'admin'
+  );
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function handle_new_user();
