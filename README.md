@@ -1,106 +1,49 @@
 # Market-Pro
 
 SaaS professionnel de caisse enregistreuse (type Sage Saisie de Caisse
-Décentralisée / Odoo POS / Square), conçu pour les petites boutiques comme
-pour les supermarchés multi-magasins.
-
-Ce dépôt est développé **par phases** (voir [docs/ROADMAP.md](docs/ROADMAP.md))
-plutôt qu'en une seule fois, pour garder un code cohérent et maintenable.
-**Phase 1 — Architecture complète et base de données — est terminée.**
+Décentralisée / Odoo POS / Square), pour les petites boutiques comme pour
+les supermarchés multi-magasins.
 
 ## Pile technique
 
-| Couche | Choix |
-|---|---|
-| Frontend | Next.js 16 (App Router) + React + TypeScript + Tailwind CSS + shadcn/ui |
-| Backend | NestJS + TypeScript, API REST versionnée (`/api/v1`) + WebSocket (Socket.IO) |
-| Base de données | PostgreSQL (hébergée par [Supabase](https://supabase.com)) |
-| ORM | Prisma |
-| Authentification | Supabase Auth (JWT géré par Supabase ; NestJS vérifie les tokens côté serveur) |
-| Déploiement | Docker · Vercel (frontend) · Railway ou VPS (API) |
+- **Frontend** : Next.js (App Router, export statique) + TypeScript +
+  Tailwind CSS + shadcn/ui
+- **Données** : [Supabase](https://supabase.com) (PostgreSQL + Auth + Row
+  Level Security). Le frontend appelle Supabase directement — pas de
+  serveur applicatif séparé. La rigueur métier (atomicité, contrôle
+  d'accès) est assurée côté base par des fonctions SQL et des policies
+  RLS, voir [`supabase/schema.sql`](supabase/schema.sql)
+- **Déploiement cible** : hébergeur de site statique connecté au dépôt
+  GitHub (Cloudflare Pages ou équivalent) + Supabase Cloud
 
-## Structure du monorepo
+Même architecture que les autres applications du dépôt (Boulange ERP,
+Fish-Afric, PaieCI…).
 
-```
-apps/
-  web/   Next.js — interface (écran de caisse, back-office)
-  api/   NestJS — API REST + WebSocket, Prisma, intégration Supabase
-docs/
-  ROADMAP.md        Détail des 6 phases de développement
-  ARCHITECTURE.md    Carte des modules backend et conventions
-docker-compose.yml   Stack de développement local (Postgres + API + Web)
-```
-
-## Démarrage rapide (développement local)
-
-Prérequis : Node.js 20.9+, pnpm, et soit PostgreSQL local soit un projet
-Supabase.
+## Démarrage
 
 ```bash
-pnpm install
-
-# Configurer les variables d'environnement
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env.local
-# → renseigner DATABASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY,
-#   SUPABASE_SERVICE_ROLE_KEY (voir "Configurer Supabase" ci-dessous)
-
-# Appliquer le schéma Prisma et charger le catalogue de permissions
-pnpm --filter api exec prisma migrate dev
-pnpm --filter api exec prisma db seed
-
-# Lancer l'API (http://localhost:3001, docs OpenAPI sur /docs)
-pnpm dev:api
-
-# Dans un autre terminal : lancer le frontend (http://localhost:3000)
-pnpm dev:web
+npm install
+cp .env.example .env.local   # renseigner NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY
+npm run dev                   # http://localhost:3000
+npm run build                 # export statique dans out/
 ```
-
-Alternative avec Docker (inclut un PostgreSQL local jetable + Adminer sur
-`:8080`) :
-
-```bash
-docker compose up
-```
-
-## Configurer Supabase
-
-Market-Pro est un SaaS multi-tenant : chaque organisation cliente est isolée
-(voir `Organization` dans le schéma Prisma). La base de données est
-PostgreSQL, hébergée par Supabase.
-
-1. Créer un projet sur [supabase.com](https://supabase.com).
-2. **Settings → Database** : copier la chaîne de connexion (utiliser le
-   pooler `Transaction` en production serverless) dans `DATABASE_URL`.
-3. **Settings → API** : copier `URL`, `anon public key` et
-   `service_role key` dans les fichiers `.env` correspondants.
-   - `SUPABASE_ANON_KEY` est publique (frontend, protégée par RLS).
-   - `SUPABASE_SERVICE_ROLE_KEY` ne doit **jamais** être exposée au
-     frontend — elle n'est utilisée que par l'API NestJS.
-4. Activer **Supabase Auth** (email/mot de passe, puis fournisseurs
-   additionnels si besoin) — l'implémentation applicative arrive en Phase 2.
-5. Exécuter les migrations Prisma contre la base Supabase :
-   `pnpm --filter api exec prisma migrate deploy`.
-6. Les policies RLS PostgreSQL (isolation par `organization_id`) seront
-   ajoutées en Phase 2/6, une fois l'authentification en place.
 
 ## Base de données
 
-Le schéma Prisma ([apps/api/prisma/schema.prisma](apps/api/prisma/schema.prisma))
-couvre l'intégralité du modèle métier demandé par le cahier des charges :
-utilisateurs/rôles/permissions (RBAC paramétrable), catalogue (articles,
-unités de vente avec coefficients et conversions pour gérer les ventes
-fractionnées), stock multi-dépôts avec historique complet des mouvements,
-achats, ventes, règlements multi-modes, factures, retours, transferts,
-inventaires, tarification multi-niveaux, promotions, audit et paramètres —
-avec isolation multi-tenant par organisation.
+1. Créer un projet sur [supabase.com](https://supabase.com).
+2. Dans **SQL Editor**, exécuter le contenu de
+   [`supabase/schema.sql`](supabase/schema.sql) — il crée les tables,
+   les fonctions RPC et les policies RLS (idempotent : peut être relancé
+   sans risque sur ce projet).
+3. **Settings → API** : copier `Project URL` et la clé `anon public` dans
+   `.env.local` (et dans les variables d'environnement de l'hébergeur).
+   Ne jamais utiliser la clé `service_role`/`secret` côté frontend.
+4. Activer Supabase Auth (email/mot de passe) pour les comptes
+   utilisateurs.
 
-Les quantités utilisent `Decimal(18,6)` (ventes fractionnées sans erreur
-d'arrondi, ex. 1/6 de carton) et les montants `Decimal(14,2)`.
+## Feuille de route
 
-## Tests
-
-```bash
-pnpm --filter api test        # tests unitaires
-pnpm --filter api test:e2e    # tests bout en bout (nécessite une base accessible)
-```
+Voir [docs/ROADMAP.md](docs/ROADMAP.md) pour le détail des phases
+(authentification, catalogue/stock, écran de caisse, règlements,
+rapports) et [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour
+l'organisation du schéma et des policies.

@@ -1,72 +1,48 @@
-# Architecture backend (apps/api)
+# Architecture
 
 ## Principes
 
-- **Multi-tenant** : `Organization` est la racine de l'isolation. La quasi
-  totalité des tables métier porte `organization_id`. Isolation applicative
-  aujourd'hui (Phase 1) ; policies RLS PostgreSQL ajoutées en Phase 2.
-- **Auth déléguée à Supabase** : `User.id` == `auth.users.id` (même UUID).
-  NestJS ne stocke ni mot de passe ni session — il vérifie les JWT émis par
-  Supabase Auth (Phase 2) via le client `service_role` (`SupabaseService`).
-- **RBAC paramétrable** : `Permission` est un catalogue applicatif fixe
-  (codes stables, ex. `sales.create`) ; `Role` est propre à chaque
-  organisation et agrège des permissions ; `UserPermission` permet des
-  dérogations fines par utilisateur.
-- **Stock en unité de base** : chaque article a une unité de base ; les
-  unités de vente (carton, pack…) portent un coefficient vers cette unité.
-  Le stock (`Stock`, `StockMovement`) est toujours exprimé en unité de base,
-  en `Decimal(18,6)` pour éviter toute erreur d'arrondi sur les ventes
-  fractionnées.
+- **Pas de serveur applicatif séparé** : le frontend Next.js appelle
+  Supabase directement via `@supabase/supabase-js` (`src/lib/supabase.ts`).
+  Même patron que les autres applications du dépôt (Boulange ERP,
+  Fish-Afric, PaieCI).
+- **Rigueur métier côté base** : les opérations qui doivent être atomiques
+  ou idempotentes (vente, achat, mouvement de stock) sont des fonctions
+  PostgreSQL (RPC), appelées via `supabase.rpc('nom_fonction', params)`.
+  Le frontend ne fait jamais de calcul métier sensible côté client.
+- **Sécurité par Row Level Security** : chaque table sensible a RLS activé ;
+  les policies filtrent par `organization_id` via `my_organization_id()`
+  (lit `profiles.organization_id` pour l'utilisateur connecté). Il n'y a
+  pas de rôle « admin bypass » côté frontend — la clé `anon` publiée dans
+  le bundle n'a que les droits accordés par les policies.
+- **Multi-tenant** : `organizations` est la racine de l'isolation. Un
+  utilisateur (`profiles`) appartient à une organisation ; toutes les
+  policies RLS s'appuient sur cette relation.
 
-## Organisation du code
+## Fichiers clés
 
 ```
-src/
-  main.ts                 Bootstrap : sécurité, validation, Swagger, versioning
-  app.module.ts            Racine — assemble les modules d'infrastructure et métier
-  common/
-    config/                Validation typée des variables d'environnement
-    decorators/             @Public(), (Phase 2 : @RequirePermissions(), @CurrentUser())
-    filters/                Filtre d'exceptions global (réponses d'erreur uniformes)
-    guards/                 (Phase 2 : SupabaseAuthGuard, PermissionsGuard)
-  prisma/                  PrismaService (client global, connecté au démarrage)
-  supabase/                SupabaseService (client admin service_role)
-  health/                  /api/v1/health, /api/v1/health/db
+supabase/schema.sql       Source de vérité de la base : tables, types,
+                           fonctions RPC, policies RLS. Idempotent —
+                           peut être ré-exécuté dans le SQL Editor.
+src/lib/supabase.ts        Client Supabase (URL + clé anon publiques).
+src/app/page.tsx           Exemple d'appel RPC (health_check).
 ```
 
-## Modules métier prévus (Phases 2 à 6)
+## Ajouter une fonctionnalité
 
-Chaque domaine ci-dessous devient un module NestJS autonome
-(`controller` + `service` + DTO), suivant le même schéma que `health/` :
+1. Étendre `supabase/schema.sql` (nouvelle table, colonne, ou fonction RPC)
+   et le ré-exécuter dans le SQL Editor Supabase.
+2. Ajouter les policies RLS correspondantes (lecture/écriture par
+   organisation et par rôle).
+3. Appeler `supabase.from('table')` (lecture simple) ou
+   `supabase.rpc('fonction', params)` (écriture avec logique métier)
+   depuis le composant Next.js concerné.
 
-| Domaine | Phase | Modèles Prisma associés |
-|---|---|---|
-| `auth` | 2 | — (vérifie les JWT Supabase) |
-| `users`, `roles` | 2 | User, Role, Permission, RolePermission, UserPermission |
-| `organizations`, `stores`, `warehouses` | 2/3 | Organization, Store, Warehouse |
-| `catalog` (produits, catégories, marques, unités) | 3 | Product, Category, Brand, Unit, ProductUnit, UnitConversion |
-| `stock` (mouvements, transferts, inventaires) | 3 | Stock, StockMovement, Transfer, Inventory |
-| `pricing` (tarifs, promotions) | 3 | PriceList, PriceListItem, Promotion, CustomerGroup |
-| `sales` (ventes, caisse) | 4/5 | Sale, SaleLine, CashRegister, CashSession, CashMovement |
-| `payments`, `invoices`, `returns` | 5 | Payment, Invoice, Return, ReturnLine |
-| `purchases` | 3/5 | Purchase, PurchaseLine, SupplierPayment |
-| `customers`, `suppliers` | 3 | Customer, CustomerPayment, Supplier |
-| `realtime` (gateway Socket.IO) | 4 | — (diffuse ventes/stock en temps réel) |
-| `reports` | 6 | agrégations en lecture sur les modèles ci-dessus |
-| `settings` | 6 | Setting |
-| `audit` | 2 (transverse) | AuditLog |
+## Sécurité
 
-Chaque nouveau module s'enregistre simplement dans `app.module.ts`. Les
-guards d'authentification/permissions (Phase 2) seront appliqués
-globalement, avec `@Public()` pour les routes exemptées (comme `/health`
-aujourd'hui).
-
-## Sécurité (mise en place progressive)
-
-- Phase 1 : Helmet, CORS restreint, rate limiting global (`ThrottlerModule`),
-  validation stricte des DTO (`class-validator`, `whitelist`), logs
-  structurés sans secrets (redaction des headers sensibles).
-- Phase 2+ : policies RLS Supabase, guard d'authentification global,
-  vérification systématique de `organization_id` sur chaque requête.
-- Phase 6 : revue OWASP complète (injection, XSS, CSRF sur les formulaires
-  serveur, audit des dépendances).
+- La clé `service_role`/`secret` ne doit **jamais** être utilisée côté
+  frontend — uniquement la clé `anon`/`publishable`, protégée par RLS.
+- Toute opération d'écriture avec des invariants métier (stock, montants,
+  idempotence) passe par une fonction RPC `security definer` plutôt que
+  par des `insert`/`update` directs depuis le client.
