@@ -1,10 +1,10 @@
 # Build context = racine du monorepo : docker build -f apps/api/Dockerfile .
-FROM node:20-alpine AS base
-RUN corepack enable
+FROM node:22-alpine AS base
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 WORKDIR /repo
 
 FROM base AS build
-COPY pnpm-workspace.yaml package.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --frozen-lockfile
