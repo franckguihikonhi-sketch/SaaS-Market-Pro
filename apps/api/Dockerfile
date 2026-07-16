@@ -15,7 +15,7 @@ COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --frozen-lockfile
 COPY apps/api apps/api
 RUN pnpm --filter api run build
-RUN pnpm --filter api deploy --prod /prod/api
+RUN pnpm --filter api deploy --prod --legacy /prod/api
 
 FROM base AS runtime
 ENV NODE_ENV=production
