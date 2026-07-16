@@ -1,0 +1,952 @@
+// Market-Pro — schéma de données professionnel (Phase 1 : architecture + BDD)
+//
+// Notes d'architecture :
+// - Multi-tenant : chaque Organization est un client SaaS indépendant. La quasi-
+//   totalité des tables porte organizationId pour l'isolation (doublée par des
+//   policies RLS PostgreSQL côté Supabase — voir supabase/policies.sql, Phase 6).
+// - Authentification : Supabase Auth est la source de vérité des comptes. User.id
+//   est le même UUID que auth.users.id (pas de mot de passe stocké côté Prisma).
+// - Quantités : Decimal(18,6) pour supporter les ventes fractionnées d'unités
+//   (1/6 de carton, 7,5 cartons...) sans erreur d'arrondi.
+// - Montants : Decimal(14,2), toutes les devises pouvant comporter des décimales.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// TENANCY, UTILISATEURS, RBAC
+// ─────────────────────────────────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  plan      String   @default("standard")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  stores        Store[]
+  warehouses    Warehouse[]
+  users         User[]
+  roles         Role[]
+  products      Product[]
+  categories    Category[]
+  brands        Brand[]
+  units         Unit[]
+  suppliers     Supplier[]
+  customers     Customer[]
+  customerGroups CustomerGroup[]
+  priceLists    PriceList[]
+  promotions    Promotion[]
+  auditLogs     AuditLog[]
+  settings      Setting[]
+
+  @@map("organizations")
+}
+
+// Catalogue global des permissions applicatives (codes stables, ex. "sales.create").
+// Ce n'est pas une table par organisation : c'est le référentiel que l'application
+// comprend. Les Roles (paramétrables par organisation) agrègent des Permissions.
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  category    String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  rolePermissions RolePermission[]
+  userOverrides   UserPermission[]
+
+  @@map("permissions")
+}
+
+model Role {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String
+  description    String?
+  isSystem       Boolean  @default(false) @map("is_system")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions  RolePermission[]
+  users        User[]
+
+  @@unique([organizationId, name])
+  @@map("roles")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// Compte utilisateur applicatif. L'id est le même UUID que Supabase
+// auth.users.id : Supabase gère le mot de passe / la session / le refresh
+// token, Prisma ne stocke que le profil métier (rôle, magasin, statut).
+model User {
+  id             String    @id @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  roleId         String?   @map("role_id") @db.Uuid
+  storeId        String?   @map("store_id") @db.Uuid
+  fullName       String    @map("full_name")
+  email          String    @unique
+  phone          String?
+  status         UserStatus @default(ACTIVE)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role               Role?             @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  store              Store?            @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  permissionOverrides UserPermission[]
+  cashSessions       CashSession[]
+  sales              Sale[]
+  stockMovements     StockMovement[]
+  auditLogs          AuditLog[]
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  INVITED
+}
+
+// Dérogations fines par utilisateur (accorder/retirer une permission au-delà
+// de son rôle), pour "chaque droit est paramétrable".
+model UserPermission {
+  userId       String  @map("user_id") @db.Uuid
+  permissionId String  @map("permission_id") @db.Uuid
+  granted      Boolean @default(true)
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionId])
+  @@map("user_permissions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// MAGASINS, DÉPÔTS, CAISSES
+// ─────────────────────────────────────────────────────────────────────────
+
+model Store {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String
+  name           String
+  address        String?
+  phone          String?
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users         User[]
+  warehouses    Warehouse[]
+  cashRegisters CashRegister[]
+  sales         Sale[]
+  purchases     Purchase[]
+  priceLists    PriceList[]
+
+  @@unique([organizationId, code])
+  @@map("stores")
+}
+
+model Warehouse {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  storeId        String?  @map("store_id") @db.Uuid
+  code           String
+  name           String
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  store        Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  stocks             Stock[]
+  stockMovements     StockMovement[]
+  purchases          Purchase[]
+  inventories        Inventory[]
+  transfersFrom      Transfer[]      @relation("TransferFromWarehouse")
+  transfersTo        Transfer[]      @relation("TransferToWarehouse")
+
+  @@unique([organizationId, code])
+  @@map("warehouses")
+}
+
+model CashRegister {
+  id        String   @id @default(uuid()) @db.Uuid
+  storeId   String   @map("store_id") @db.Uuid
+  code      String
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  store    Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sessions CashSession[]
+  sales    Sale[]
+
+  @@unique([storeId, code])
+  @@map("cash_registers")
+}
+
+// Ouverture / fermeture de caisse : fond de caisse, comptage, écarts.
+model CashSession {
+  id                String            @id @default(uuid()) @db.Uuid
+  cashRegisterId    String            @map("cash_register_id") @db.Uuid
+  userId            String            @map("user_id") @db.Uuid
+  status            CashSessionStatus @default(OPEN)
+  openingFloat      Decimal           @map("opening_float") @db.Decimal(14, 2)
+  expectedAmount    Decimal?          @map("expected_amount") @db.Decimal(14, 2)
+  countedAmount     Decimal?          @map("counted_amount") @db.Decimal(14, 2)
+  difference        Decimal?          @db.Decimal(14, 2)
+  openedAt          DateTime          @default(now()) @map("opened_at")
+  closedAt          DateTime?         @map("closed_at")
+  note              String?
+
+  cashRegister CashRegister      @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  sales        Sale[]
+  movements    CashMovement[]
+
+  @@index([cashRegisterId])
+  @@map("cash_sessions")
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+// Retrait / dépôt d'espèces en cours de session (hors vente).
+model CashMovement {
+  id            String           @id @default(uuid()) @db.Uuid
+  cashSessionId String           @map("cash_session_id") @db.Uuid
+  type          CashMovementType
+  amount        Decimal          @db.Decimal(14, 2)
+  reason        String?
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  cashSession CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Cascade)
+
+  @@map("cash_movements")
+}
+
+enum CashMovementType {
+  DEPOSIT
+  WITHDRAWAL
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CATALOGUE : CATÉGORIES, MARQUES, UNITÉS, ARTICLES
+// ─────────────────────────────────────────────────────────────────────────
+
+model Category {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  parentId       String?  @map("parent_id") @db.Uuid
+  name           String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent       Category?    @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Category[]   @relation("CategoryTree")
+  products     Product[]
+
+  @@map("categories")
+}
+
+model Brand {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products     Product[]
+
+  @@unique([organizationId, name])
+  @@map("brands")
+}
+
+// Référentiel des unités de mesure/vente (Palette, Carton, Pack, Bouteille,
+// Kg, g, Litre, ml, Pièce, Rouleau, Boîte, Sac, Bidon, Lot, Container...).
+model Unit {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String
+  label          String
+
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productUnits     ProductUnit[]
+  conversionsFrom  UnitConversion[] @relation("ConversionFromUnit")
+  conversionsTo    UnitConversion[] @relation("ConversionToUnit")
+  baseUnitProducts Product[]        @relation("BaseUnitOfProduct")
+
+  @@unique([organizationId, code])
+  @@map("units")
+}
+
+model Product {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  categoryId     String?       @map("category_id") @db.Uuid
+  brandId        String?       @map("brand_id") @db.Uuid
+  baseUnitId     String        @map("base_unit_id") @db.Uuid
+  code           String
+  barcode        String?
+  reference      String?
+  label          String
+  purchasePrice  Decimal       @map("purchase_price") @db.Decimal(14, 2)
+  salePrice      Decimal       @map("sale_price") @db.Decimal(14, 2)
+  taxRate        Decimal       @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  minStock       Decimal       @default(0) @map("min_stock") @db.Decimal(18, 6)
+  maxStock       Decimal?      @map("max_stock") @db.Decimal(18, 6)
+  location       String?
+  status         ProductStatus @default(ACTIVE)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category     Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brand        Brand?        @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  baseUnit     Unit          @relation("BaseUnitOfProduct", fields: [baseUnitId], references: [id], onDelete: Restrict)
+
+  units             ProductUnit[]
+  unitConversions   UnitConversion[]
+  stocks            Stock[]
+  stockMovements    StockMovement[]
+  purchaseLines     PurchaseLine[]
+  saleLines         SaleLine[]
+  returnLines       ReturnLine[]
+  transferLines     TransferLine[]
+  inventoryLines    InventoryLine[]
+  priceListItems    PriceListItem[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, barcode])
+  @@map("products")
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+// Unités de vente/achat disponibles pour un article, avec coefficient vers
+// l'unité de base de l'article (ex. 1 Carton = 24 Bouteille -> coefficient 24
+// si Bouteille est l'unité de base). Le stock réel est toujours en unité de base.
+model ProductUnit {
+  id                String   @id @default(uuid()) @db.Uuid
+  productId         String   @map("product_id") @db.Uuid
+  unitId            String   @map("unit_id") @db.Uuid
+  coefficientToBase Decimal  @map("coefficient_to_base") @db.Decimal(18, 6)
+  barcode           String?
+  isBase            Boolean  @default(false) @map("is_base")
+  isPurchaseUnit    Boolean  @default(true) @map("is_purchase_unit")
+  isSaleUnit        Boolean  @default(true) @map("is_sale_unit")
+  allowFractional   Boolean  @default(true) @map("allow_fractional")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  unit    Unit    @relation(fields: [unitId], references: [id], onDelete: Restrict)
+
+  purchaseLines  PurchaseLine[]
+  saleLines      SaleLine[]
+
+  @@unique([productId, unitId])
+  @@map("product_units")
+}
+
+// Table de conversion explicite entre deux unités pour un article donné.
+// Sert de cache validé pour les conversions non triviales et pour la
+// traçabilité ("1 Carton = 24 Bouteille", "1 Palette = 48 Carton"...).
+model UnitConversion {
+  id           String  @id @default(uuid()) @db.Uuid
+  productId    String  @map("product_id") @db.Uuid
+  fromUnitId   String  @map("from_unit_id") @db.Uuid
+  toUnitId     String  @map("to_unit_id") @db.Uuid
+  factor       Decimal @db.Decimal(18, 6) // 1 fromUnit = factor * toUnit
+
+  product  Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  fromUnit Unit    @relation("ConversionFromUnit", fields: [fromUnitId], references: [id], onDelete: Restrict)
+  toUnit   Unit    @relation("ConversionToUnit", fields: [toUnitId], references: [id], onDelete: Restrict)
+
+  @@unique([productId, fromUnitId, toUnitId])
+  @@map("unit_conversions")
+}
+
+// Relation supplémentaire nommée pour Product.baseUnit (Prisma exige un nom
+// de relation explicite car Unit est référencée plusieurs fois par Product).
+// (déclarée ici pour lisibilité, utilisée via l'attribut @relation ci-dessus)
+
+// ─────────────────────────────────────────────────────────────────────────
+// TARIFICATION, REMISES, PROMOTIONS
+// ─────────────────────────────────────────────────────────────────────────
+
+model PriceList {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  storeId        String?       @map("store_id") @db.Uuid
+  customerId     String?       @map("customer_id") @db.Uuid
+  name           String
+  type           PriceListType
+  priority       Int           @default(0)
+  validFrom      DateTime?     @map("valid_from")
+  validTo        DateTime?     @map("valid_to")
+  isActive       Boolean       @default(true) @map("is_active")
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  store        Store?          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer     Customer?       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items        PriceListItem[]
+
+  @@map("price_lists")
+}
+
+enum PriceListType {
+  NORMAL
+  WHOLESALE
+  SEMI_WHOLESALE
+  VIP
+  LOYALTY
+  PROMOTION
+  STORE_SPECIFIC
+  CUSTOMER_SPECIFIC
+}
+
+// Palier de prix par quantité (1-5 -> 1000, 6-20 -> 950, 21-100 -> 900...).
+model PriceListItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  priceListId String   @map("price_list_id") @db.Uuid
+  productId   String   @map("product_id") @db.Uuid
+  minQty      Decimal  @default(1) @map("min_qty") @db.Decimal(18, 6)
+  maxQty      Decimal? @map("max_qty") @db.Decimal(18, 6)
+  price       Decimal  @db.Decimal(14, 2)
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("price_list_items")
+}
+
+model Promotion {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  name           String
+  type           PromotionType
+  value          Decimal       @db.Decimal(14, 2)
+  scope          PromotionScope
+  scopeRefId     String?       @map("scope_ref_id") @db.Uuid // productId or categoryId selon scope
+  startsAt       DateTime?     @map("starts_at")
+  endsAt         DateTime?     @map("ends_at")
+  isActive       Boolean       @default(true) @map("is_active")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("promotions")
+}
+
+enum PromotionType {
+  PERCENT
+  AMOUNT
+  BUY_X_GET_Y
+}
+
+enum PromotionScope {
+  GLOBAL
+  CATEGORY
+  PRODUCT
+}
+
+model CustomerGroup {
+  id             String  @id @default(uuid()) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  name           String
+  discountPercent Decimal @default(0) @map("discount_percent") @db.Decimal(5, 2)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customers    Customer[]
+
+  @@map("customer_groups")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// TIERS : CLIENTS, FOURNISSEURS
+// ─────────────────────────────────────────────────────────────────────────
+
+model Customer {
+  id              String       @id @default(uuid()) @db.Uuid
+  organizationId  String       @map("organization_id") @db.Uuid
+  groupId         String?      @map("group_id") @db.Uuid
+  type            CustomerType @default(WALK_IN)
+  code            String
+  name            String
+  phone           String?
+  email           String?
+  creditLimit     Decimal      @default(0) @map("credit_limit") @db.Decimal(14, 2)
+  balance         Decimal      @default(0) @db.Decimal(14, 2) // solde compte client (créance)
+  loyaltyPoints   Int          @default(0) @map("loyalty_points")
+  discountPercent Decimal      @default(0) @map("discount_percent") @db.Decimal(5, 2)
+  isActive        Boolean      @default(true) @map("is_active")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  group        CustomerGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  sales          Sale[]
+  invoices       Invoice[]
+  priceLists     PriceList[]
+  payments       CustomerPayment[]
+
+  @@unique([organizationId, code])
+  @@map("customers")
+}
+
+enum CustomerType {
+  WALK_IN
+  LOYALTY
+  COMPANY
+}
+
+// Règlement d'un client sur son compte (indépendant d'une vente précise),
+// vient réduire Customer.balance.
+model CustomerPayment {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  method     PaymentMethod
+  amount     Decimal  @db.Decimal(14, 2)
+  reference  String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("customer_payments")
+}
+
+model Supplier {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String
+  name           String
+  phone          String?
+  email          String?
+  balance        Decimal  @default(0) @db.Decimal(14, 2) // solde dû au fournisseur
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchases    Purchase[]
+  payments     SupplierPayment[]
+
+  @@unique([organizationId, code])
+  @@map("suppliers")
+}
+
+model SupplierPayment {
+  id         String   @id @default(uuid()) @db.Uuid
+  supplierId String   @map("supplier_id") @db.Uuid
+  purchaseId String?  @map("purchase_id") @db.Uuid
+  method     PaymentMethod
+  amount     Decimal  @db.Decimal(14, 2)
+  reference  String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  supplier Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  purchase Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+
+  @@map("supplier_payments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// STOCK
+// ─────────────────────────────────────────────────────────────────────────
+
+// Stock courant par article et par dépôt, toujours en unité de base.
+model Stock {
+  id          String   @id @default(uuid()) @db.Uuid
+  productId   String   @map("product_id") @db.Uuid
+  warehouseId String   @map("warehouse_id") @db.Uuid
+  quantity    Decimal  @default(0) @db.Decimal(18, 6)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, warehouseId])
+  @@map("stocks")
+}
+
+// Historique complet de chaque mouvement de stock (qui, quand, pourquoi,
+// quantité, ancien stock, nouveau stock, document lié).
+model StockMovement {
+  id             String            @id @default(uuid()) @db.Uuid
+  productId      String            @map("product_id") @db.Uuid
+  warehouseId    String            @map("warehouse_id") @db.Uuid
+  userId         String?           @map("user_id") @db.Uuid
+  type           StockMovementType
+  quantity       Decimal           @db.Decimal(18, 6) // signé : + entrée, - sortie
+  previousQty    Decimal           @map("previous_qty") @db.Decimal(18, 6)
+  newQty         Decimal           @map("new_qty") @db.Decimal(18, 6)
+  reason         String?
+  documentType   String?           @map("document_type") // "purchase" | "sale" | "transfer" | "inventory" | ...
+  documentId     String?           @map("document_id") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([productId, warehouseId])
+  @@index([documentType, documentId])
+  @@map("stock_movements")
+}
+
+enum StockMovementType {
+  PURCHASE_RECEIPT
+  SALE
+  ADJUSTMENT
+  BREAKAGE
+  LOSS
+  THEFT
+  SUPPLIER_RETURN
+  CUSTOMER_RETURN
+  TRANSFER_IN
+  TRANSFER_OUT
+  INVENTORY_COUNT
+}
+
+// Inventaire tournant : comptage physique vs système, avec écarts.
+model Inventory {
+  id          String          @id @default(uuid()) @db.Uuid
+  warehouseId String          @map("warehouse_id") @db.Uuid
+  reference   String
+  status      InventoryStatus @default(DRAFT)
+  startedAt   DateTime        @default(now()) @map("started_at")
+  validatedAt DateTime?       @map("validated_at")
+
+  warehouse Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  lines     InventoryLine[]
+
+  @@map("inventories")
+}
+
+enum InventoryStatus {
+  DRAFT
+  IN_PROGRESS
+  VALIDATED
+}
+
+model InventoryLine {
+  id          String  @id @default(uuid()) @db.Uuid
+  inventoryId String  @map("inventory_id") @db.Uuid
+  productId   String  @map("product_id") @db.Uuid
+  systemQty   Decimal @map("system_qty") @db.Decimal(18, 6)
+  countedQty  Decimal @map("counted_qty") @db.Decimal(18, 6)
+  difference  Decimal @db.Decimal(18, 6)
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([inventoryId, productId])
+  @@map("inventory_lines")
+}
+
+// Transfert de stock entre deux dépôts.
+model Transfer {
+  id              String         @id @default(uuid()) @db.Uuid
+  reference       String
+  fromWarehouseId String         @map("from_warehouse_id") @db.Uuid
+  toWarehouseId   String         @map("to_warehouse_id") @db.Uuid
+  status          TransferStatus @default(DRAFT)
+  requestedAt     DateTime       @default(now()) @map("requested_at")
+  completedAt     DateTime?      @map("completed_at")
+
+  fromWarehouse Warehouse      @relation("TransferFromWarehouse", fields: [fromWarehouseId], references: [id], onDelete: Restrict)
+  toWarehouse   Warehouse      @relation("TransferToWarehouse", fields: [toWarehouseId], references: [id], onDelete: Restrict)
+  lines         TransferLine[]
+
+  @@map("transfers")
+}
+
+enum TransferStatus {
+  DRAFT
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+model TransferLine {
+  id         String  @id @default(uuid()) @db.Uuid
+  transferId String  @map("transfer_id") @db.Uuid
+  productId  String  @map("product_id") @db.Uuid
+  quantity   Decimal @db.Decimal(18, 6)
+
+  transfer Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("transfer_lines")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ACHATS
+// ─────────────────────────────────────────────────────────────────────────
+
+model Purchase {
+  id           String         @id @default(uuid()) @db.Uuid
+  storeId      String?        @map("store_id") @db.Uuid
+  warehouseId  String         @map("warehouse_id") @db.Uuid
+  supplierId   String         @map("supplier_id") @db.Uuid
+  reference    String
+  status       PurchaseStatus @default(DRAFT)
+  totalHt      Decimal        @default(0) @map("total_ht") @db.Decimal(14, 2)
+  totalTax     Decimal        @default(0) @map("total_tax") @db.Decimal(14, 2)
+  totalTtc     Decimal        @default(0) @map("total_ttc") @db.Decimal(14, 2)
+  orderedAt    DateTime?      @map("ordered_at")
+  receivedAt   DateTime?      @map("received_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  store     Store?    @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  supplier  Supplier  @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  lines    PurchaseLine[]
+  payments SupplierPayment[]
+
+  @@map("purchases")
+}
+
+enum PurchaseStatus {
+  DRAFT
+  ORDERED
+  RECEIVED
+  CANCELLED
+  RETURNED
+}
+
+model PurchaseLine {
+  id              String  @id @default(uuid()) @db.Uuid
+  purchaseId      String  @map("purchase_id") @db.Uuid
+  productId       String  @map("product_id") @db.Uuid
+  productUnitId   String  @map("product_unit_id") @db.Uuid
+  quantity        Decimal @db.Decimal(18, 6)
+  unitPrice       Decimal @map("unit_price") @db.Decimal(14, 2)
+  taxRate         Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  discountPercent Decimal @default(0) @map("discount_percent") @db.Decimal(5, 2)
+  lineTotal       Decimal @map("line_total") @db.Decimal(14, 2)
+
+  purchase    Purchase    @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productUnit ProductUnit @relation(fields: [productUnitId], references: [id], onDelete: Restrict)
+
+  @@map("purchase_lines")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// VENTES, RÈGLEMENTS, FACTURES, RETOURS
+// ─────────────────────────────────────────────────────────────────────────
+
+model Sale {
+  id             String     @id @default(uuid()) @db.Uuid
+  storeId        String     @map("store_id") @db.Uuid
+  cashRegisterId String     @map("cash_register_id") @db.Uuid
+  cashSessionId  String?    @map("cash_session_id") @db.Uuid
+  userId         String     @map("user_id") @db.Uuid
+  customerId     String?    @map("customer_id") @db.Uuid
+  number         String
+  status         SaleStatus @default(DRAFT)
+  subtotal       Decimal    @default(0) @db.Decimal(14, 2)
+  discountTotal  Decimal    @default(0) @map("discount_total") @db.Decimal(14, 2)
+  taxTotal       Decimal    @default(0) @map("tax_total") @db.Decimal(14, 2)
+  total          Decimal    @default(0) @db.Decimal(14, 2)
+  heldAt         DateTime?  @map("held_at")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  closedAt       DateTime?  @map("closed_at")
+
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+  cashSession  CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  lines    SaleLine[]
+  payments Payment[]
+  invoice  Invoice?
+  returns  Return[]
+
+  @@unique([storeId, number])
+  @@index([cashSessionId])
+  @@map("sales")
+}
+
+enum SaleStatus {
+  DRAFT
+  HELD
+  COMPLETED
+  CANCELLED
+  RETURNED
+}
+
+model SaleLine {
+  id              String  @id @default(uuid()) @db.Uuid
+  saleId          String  @map("sale_id") @db.Uuid
+  productId       String  @map("product_id") @db.Uuid
+  productUnitId   String  @map("product_unit_id") @db.Uuid
+  quantity        Decimal @db.Decimal(18, 6)
+  unitPrice       Decimal @map("unit_price") @db.Decimal(14, 2)
+  discountPercent Decimal @default(0) @map("discount_percent") @db.Decimal(5, 2)
+  discountAmount  Decimal @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  taxRate         Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  lineTotal       Decimal @map("line_total") @db.Decimal(14, 2)
+
+  sale        Sale        @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productUnit ProductUnit @relation(fields: [productUnitId], references: [id], onDelete: Restrict)
+
+  @@map("sale_lines")
+}
+
+model Payment {
+  id        String        @id @default(uuid()) @db.Uuid
+  saleId    String        @map("sale_id") @db.Uuid
+  method    PaymentMethod
+  amount    Decimal       @db.Decimal(14, 2)
+  reference String?
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MOBILE_MONEY_ORANGE
+  MOBILE_MONEY_MTN
+  MOBILE_MONEY_WAVE
+  MOBILE_MONEY_MOOV
+  CHEQUE
+  BANK_TRANSFER
+  CUSTOMER_ACCOUNT
+  VOUCHER
+  CREDIT_NOTE
+}
+
+model Invoice {
+  id         String        @id @default(uuid()) @db.Uuid
+  saleId     String?       @unique @map("sale_id") @db.Uuid
+  customerId String        @map("customer_id") @db.Uuid
+  number     String        @unique
+  status     InvoiceStatus @default(ISSUED)
+  totalTtc   Decimal       @map("total_ttc") @db.Decimal(14, 2)
+  issuedAt   DateTime      @default(now()) @map("issued_at")
+  dueAt      DateTime?     @map("due_at")
+
+  sale     Sale?    @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  ISSUED
+  PAID
+  CANCELLED
+}
+
+model Return {
+  id             String       @id @default(uuid()) @db.Uuid
+  originalSaleId String?      @map("original_sale_id") @db.Uuid
+  type           ReturnType
+  status         ReturnStatus @default(DRAFT)
+  totalAmount    Decimal      @default(0) @map("total_amount") @db.Decimal(14, 2)
+  reason         String?
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  originalSale Sale?        @relation(fields: [originalSaleId], references: [id], onDelete: SetNull)
+  lines        ReturnLine[]
+
+  @@map("returns")
+}
+
+enum ReturnType {
+  CUSTOMER_RETURN
+  SUPPLIER_RETURN
+}
+
+enum ReturnStatus {
+  DRAFT
+  VALIDATED
+  CANCELLED
+}
+
+model ReturnLine {
+  id        String  @id @default(uuid()) @db.Uuid
+  returnId  String  @map("return_id") @db.Uuid
+  productId String  @map("product_id") @db.Uuid
+  quantity  Decimal @db.Decimal(18, 6)
+  unitPrice Decimal @map("unit_price") @db.Decimal(14, 2)
+
+  return  Return  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("return_lines")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AUDIT & CONFIGURATION
+// ─────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  action         String
+  entity         String
+  entityId       String?  @map("entity_id") @db.Uuid
+  before         Json?
+  after          Json?
+  ip             String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, entity, entityId])
+  @@map("audit_logs")
+}
+
+model Setting {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  storeId        String?  @map("store_id") @db.Uuid
+  key            String
+  value          Json
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, storeId, key])
+  @@map("settings")
+}

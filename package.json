@@ -1,0 +1,21 @@
+{
+  "name": "saas-market-pro",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Market-Pro — SaaS de caisse enregistreuse professionnelle",
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter api start:dev",
+    "build:web": "pnpm --filter web build",
+    "build:api": "pnpm --filter api build",
+    "lint:web": "pnpm --filter web lint",
+    "lint:api": "pnpm --filter api lint",
+    "test:api": "pnpm --filter api test",
+    "prisma:generate": "pnpm --filter api exec prisma generate",
+    "prisma:migrate": "pnpm --filter api exec prisma migrate dev",
+    "prisma:studio": "pnpm --filter api exec prisma studio"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}
