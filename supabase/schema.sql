@@ -25,7 +25,7 @@ drop table if exists
   transfer_lines, transfers, unit_conversions, user_permissions,
   role_permissions, permissions, roles, stock_movements, stocks,
   product_units, products, units, brands, categories, customers, suppliers,
-  warehouses, stores, users, organizations
+  warehouses, stores, users, organizations, profiles
 cascade;
 
 drop type if exists user_role cascade;
