@@ -413,3 +413,151 @@ begin
   return v_movement_id;
 end;
 $$;
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- PHASE 4 : VENTES (ÉCRAN DE CAISSE)
+-- ─────────────────────────────────────────────────────────────────────────
+
+create table sales (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references organizations on delete cascade,
+  store_id uuid not null references stores on delete restrict,
+  warehouse_id uuid not null references warehouses on delete restrict,
+  customer_id uuid references customers on delete set null,
+  status text not null default 'completed' check (status in ('held', 'completed', 'cancelled')),
+  subtotal numeric(14,2) not null default 0,
+  tax_total numeric(14,2) not null default 0,
+  total numeric(14,2) not null default 0,
+  author uuid references profiles,
+  idempotency_key uuid not null unique,
+  created_at timestamptz not null default now()
+);
+
+create table sale_lines (
+  id uuid primary key default gen_random_uuid(),
+  sale_id uuid not null references sales on delete cascade,
+  product_id uuid not null references products on delete restrict,
+  product_unit_id uuid references product_units on delete set null,
+  label text not null,
+  quantity numeric(18,6) not null check (quantity > 0),
+  base_quantity numeric(18,6) not null check (base_quantity > 0),
+  unit_price numeric(14,2) not null check (unit_price >= 0),
+  tax_rate numeric(5,2) not null default 0,
+  line_total numeric(14,2) not null
+);
+create index on sale_lines (sale_id);
+
+alter table sales enable row level security;
+alter table sale_lines enable row level security;
+
+create policy "org read" on sales for select using (organization_id = my_organization_id());
+create policy "org read" on sale_lines for select using (
+  exists (select 1 from sales s where s.id = sale_id and s.organization_id = my_organization_id())
+);
+
+-- Un ticket en attente peut être abandonné (supprimé) par son auteur sans
+-- passer par une RPC ; les lignes suivent par cascade. Les ventes finalisées
+-- ne sont jamais modifiables/supprimables en direct (traçabilité).
+create policy "author delete held" on sales for delete using (
+  organization_id = my_organization_id() and status = 'held' and author = auth.uid()
+);
+
+create or replace function record_sale(
+  p_store_id uuid,
+  p_warehouse_id uuid,
+  p_status text,
+  p_lines jsonb,
+  p_customer_id uuid default null,
+  p_idempotency_key uuid default gen_random_uuid()
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_existing uuid;
+  v_sale_id uuid;
+  v_line jsonb;
+  v_product products%rowtype;
+  v_unit product_units%rowtype;
+  v_coefficient numeric;
+  v_base_qty numeric;
+  v_line_total numeric;
+  v_subtotal numeric := 0;
+  v_tax_total numeric := 0;
+  v_available numeric;
+  v_label text;
+begin
+  select id into v_existing from sales where idempotency_key = p_idempotency_key;
+  if found then return v_existing; end if;
+
+  if coalesce(my_role() in ('admin', 'manager', 'super_admin', 'cashier'), false) is not true then
+    raise exception 'Rôle non autorisé à enregistrer une vente';
+  end if;
+  if p_status not in ('held', 'completed') then
+    raise exception 'Statut invalide';
+  end if;
+  if not exists (select 1 from stores where id = p_store_id and organization_id = my_organization_id()) then
+    raise exception 'Magasin introuvable';
+  end if;
+  if not exists (select 1 from warehouses where id = p_warehouse_id and organization_id = my_organization_id()) then
+    raise exception 'Dépôt introuvable';
+  end if;
+  if p_lines is null or jsonb_array_length(p_lines) = 0 then
+    raise exception 'Le ticket est vide';
+  end if;
+
+  insert into sales (organization_id, store_id, warehouse_id, customer_id, status, author, idempotency_key)
+  values (my_organization_id(), p_store_id, p_warehouse_id, p_customer_id, p_status, auth.uid(), p_idempotency_key)
+  returning id into v_sale_id;
+
+  for v_line in select * from jsonb_array_elements(p_lines)
+  loop
+    select * into v_product from products
+      where id = (v_line->>'product_id')::uuid and organization_id = my_organization_id();
+    if not found then
+      raise exception 'Article introuvable dans le ticket';
+    end if;
+
+    v_coefficient := 1;
+    v_label := v_product.label;
+    if v_line ? 'product_unit_id' and (v_line->>'product_unit_id') is not null then
+      select * into v_unit from product_units where id = (v_line->>'product_unit_id')::uuid and product_id = v_product.id;
+      if not found then raise exception 'Unité de vente introuvable'; end if;
+      v_coefficient := v_unit.coefficient_to_base;
+    end if;
+
+    v_base_qty := (v_line->>'quantity')::numeric * v_coefficient;
+    v_line_total := (v_line->>'quantity')::numeric * (v_line->>'unit_price')::numeric;
+    v_subtotal := v_subtotal + v_line_total;
+    v_tax_total := v_tax_total + round(v_line_total * v_product.tax_rate / 100, 2);
+
+    insert into sale_lines (
+      sale_id, product_id, product_unit_id, label, quantity, base_quantity, unit_price, tax_rate, line_total
+    ) values (
+      v_sale_id, v_product.id,
+      case when v_line ? 'product_unit_id' and (v_line->>'product_unit_id') is not null
+        then (v_line->>'product_unit_id')::uuid else null end,
+      v_label, (v_line->>'quantity')::numeric, v_base_qty, (v_line->>'unit_price')::numeric, v_product.tax_rate, v_line_total
+    );
+
+    if p_status = 'completed' then
+      select quantity into v_available from stocks
+        where product_id = v_product.id and warehouse_id = p_warehouse_id for update;
+      if coalesce(v_available, 0) < v_base_qty then
+        raise exception 'Stock insuffisant pour % (disponible : %)', v_label, coalesce(v_available, 0);
+      end if;
+      update stocks set quantity = quantity - v_base_qty, updated_at = now()
+        where product_id = v_product.id and warehouse_id = p_warehouse_id;
+      insert into stock_movements (
+        product_id, warehouse_id, author, type, quantity, previous_qty, new_qty, reason, idempotency_key
+      ) values (
+        v_product.id, p_warehouse_id, auth.uid(), 'sale', -v_base_qty, v_available, v_available - v_base_qty,
+        'Vente ' || v_sale_id, gen_random_uuid()
+      );
+    end if;
+  end loop;
+
+  update sales set subtotal = v_subtotal, tax_total = v_tax_total, total = v_subtotal + v_tax_total
+    where id = v_sale_id;
+
+  return v_sale_id;
+end;
+$$;
