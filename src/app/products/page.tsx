@@ -1,0 +1,493 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { AppNav } from "@/components/app-nav";
+import { supabase } from "@/lib/supabase";
+import { useSession } from "@/lib/use-session";
+
+type Category = { id: string; name: string };
+type Brand = { id: string; name: string };
+type Unit = { id: string; code: string; label: string };
+type Product = {
+  id: string;
+  code: string;
+  barcode: string | null;
+  label: string;
+  category_id: string | null;
+  brand_id: string | null;
+  base_unit_id: string;
+  purchase_price: number;
+  sale_price: number;
+  tax_rate: number;
+  min_stock: number;
+  status: string;
+};
+type ProductUnit = {
+  id: string;
+  product_id: string;
+  unit_id: string;
+  coefficient_to_base: number;
+  is_base: boolean;
+  barcode: string | null;
+};
+
+function ProductUnitsDialog({
+  product,
+  units,
+  canWrite,
+}: {
+  product: Product;
+  units: Unit[];
+  canWrite: boolean;
+}) {
+  const [items, setItems] = useState<ProductUnit[]>([]);
+  const [unitId, setUnitId] = useState<string>("");
+  const [coefficient, setCoefficient] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("product_units")
+      .select("id, product_id, unit_id, coefficient_to_base, is_base, barcode")
+      .eq("product_id", product.id);
+    setItems((data as ProductUnit[]) ?? []);
+    setLoading(false);
+  }, [product.id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-open
+    if (open) void load();
+  }, [open, load]);
+
+  async function addUnit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const coeff = Number(coefficient);
+    if (!unitId || !coeff || coeff <= 0) {
+      setError("Choisissez une unité et un coefficient valide (> 0).");
+      return;
+    }
+    const { error } = await supabase.from("product_units").insert({
+      product_id: product.id,
+      unit_id: unitId,
+      coefficient_to_base: coeff,
+      barcode: barcode || null,
+    });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setUnitId("");
+    setCoefficient("");
+    setBarcode("");
+    void load();
+  }
+
+  const baseUnit = units.find((u) => u.id === product.base_unit_id);
+  const availableUnits = units.filter((u) => u.id !== product.base_unit_id);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>
+        Unités de vente
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{product.label}</DialogTitle>
+          <DialogDescription>
+            Unité de base : {baseUnit?.label ?? "—"}. Ajoutez des unités de vente
+            alternatives (ex. Carton = 24 × {baseUnit?.label ?? "unité de base"}).
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Chargement…</p>
+        ) : items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Aucune unité alternative.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Unité</TableHead>
+                <TableHead>Coefficient</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((pu) => (
+                <TableRow key={pu.id}>
+                  <TableCell>{units.find((u) => u.id === pu.unit_id)?.label ?? "—"}</TableCell>
+                  <TableCell>
+                    1 = {pu.coefficient_to_base} × {baseUnit?.label ?? "unité de base"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+
+        {canWrite && (
+          <form onSubmit={addUnit} className="flex flex-col gap-3 border-t pt-3">
+            <div className="flex flex-col gap-2">
+              <Label>Unité</Label>
+              <Select value={unitId} onValueChange={(v) => v && setUnitId(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choisir une unité" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableUnits.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="pu-coeff">
+                Coefficient (1 unité = combien de {baseUnit?.label ?? "unité de base"} ?)
+              </Label>
+              <Input
+                id="pu-coeff"
+                type="number"
+                min="0"
+                step="0.000001"
+                value={coefficient}
+                onChange={(e) => setCoefficient(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="pu-barcode">Code-barres (optionnel)</Label>
+              <Input id="pu-barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit">Ajouter cette unité</Button>
+          </form>
+        )}
+
+        <DialogFooter showCloseButton />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function NewProductDialog({
+  organizationId,
+  categories,
+  brands,
+  units,
+  onCreated,
+}: {
+  organizationId: string;
+  categories: Category[];
+  brands: Brand[];
+  units: Unit[];
+  onCreated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState("");
+  const [code, setCode] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [categoryId, setCategoryId] = useState("none");
+  const [brandId, setBrandId] = useState("none");
+  const [baseUnitId, setBaseUnitId] = useState("");
+  const [purchasePrice, setPurchasePrice] = useState("0");
+  const [salePrice, setSalePrice] = useState("0");
+  const [taxRate, setTaxRate] = useState("0");
+  const [minStock, setMinStock] = useState("0");
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!baseUnitId) {
+      setError("Choisissez une unité de base.");
+      return;
+    }
+    const { error } = await supabase.from("products").insert({
+      organization_id: organizationId,
+      label,
+      code,
+      barcode: barcode || null,
+      category_id: categoryId === "none" ? null : categoryId,
+      brand_id: brandId === "none" ? null : brandId,
+      base_unit_id: baseUnitId,
+      purchase_price: Number(purchasePrice) || 0,
+      sale_price: Number(salePrice) || 0,
+      tax_rate: Number(taxRate) || 0,
+      min_stock: Number(minStock) || 0,
+    });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setLabel("");
+    setCode("");
+    setBarcode("");
+    setCategoryId("none");
+    setBrandId("none");
+    setBaseUnitId("");
+    setPurchasePrice("0");
+    setSalePrice("0");
+    setTaxRate("0");
+    setMinStock("0");
+    setOpen(false);
+    onCreated();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button />}>Nouvel article</DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nouvel article</DialogTitle>
+          <DialogDescription>L&apos;unité de base est celle utilisée pour le suivi du stock.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="p-label">Désignation</Label>
+            <Input id="p-label" required value={label} onChange={(e) => setLabel(e.target.value)} />
+          </div>
+          <div className="flex gap-2">
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="p-code">Code</Label>
+              <Input id="p-code" required value={code} onChange={(e) => setCode(e.target.value)} />
+            </div>
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="p-barcode">Code-barres</Label>
+              <Input id="p-barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex flex-1 flex-col gap-2">
+              <Label>Catégorie</Label>
+              <Select value={categoryId} onValueChange={(v) => v && setCategoryId(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucune</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-1 flex-col gap-2">
+              <Label>Marque</Label>
+              <Select value={brandId} onValueChange={(v) => v && setBrandId(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucune</SelectItem>
+                  {brands.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Unité de base</Label>
+            <Select value={baseUnitId} onValueChange={(v) => v && setBaseUnitId(v)}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Choisir une unité" />
+              </SelectTrigger>
+              <SelectContent>
+                {units.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="p-purchase">Prix d&apos;achat</Label>
+              <Input id="p-purchase" type="number" min="0" step="0.01" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} />
+            </div>
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="p-sale">Prix de vente</Label>
+              <Input id="p-sale" type="number" min="0" step="0.01" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="p-tax">TVA (%)</Label>
+              <Input id="p-tax" type="number" min="0" step="0.01" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+            </div>
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="p-min">Stock minimum</Label>
+              <Input id="p-min" type="number" min="0" step="0.01" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
+            </div>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button type="submit">Créer l&apos;article</Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export default function ProductsPage() {
+  const router = useRouter();
+  const { session, profile, loading } = useSession();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  useEffect(() => {
+    if (!loading && !session) router.push("/login");
+  }, [loading, session, router]);
+
+  const load = useCallback(async () => {
+    if (!profile) return;
+    setLoadingData(true);
+    const [{ data: p }, { data: c }, { data: b }, { data: u }] = await Promise.all([
+      supabase
+        .from("products")
+        .select("id, code, barcode, label, category_id, brand_id, base_unit_id, purchase_price, sale_price, tax_rate, min_stock, status")
+        .eq("organization_id", profile.organization_id)
+        .order("label"),
+      supabase.from("categories").select("id, name").eq("organization_id", profile.organization_id).order("name"),
+      supabase.from("brands").select("id, name").eq("organization_id", profile.organization_id).order("name"),
+      supabase.from("units").select("id, code, label").eq("organization_id", profile.organization_id).order("code"),
+    ]);
+    setProducts((p as Product[]) ?? []);
+    setCategories((c as Category[]) ?? []);
+    setBrands((b as Brand[]) ?? []);
+    setUnits((u as Unit[]) ?? []);
+    setLoadingData(false);
+  }, [profile]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
+    void load();
+  }, [load]);
+
+  if (loading || !session || !profile) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/30 p-8">
+        <p className="text-muted-foreground">Chargement…</p>
+      </div>
+    );
+  }
+
+  const canWrite = ["admin", "manager", "super_admin"].includes(profile.role);
+  const hasUnits = units.length > 0;
+
+  return (
+    <div className="min-h-screen bg-muted/30 p-8">
+      <div className="mx-auto flex max-w-4xl flex-col gap-6">
+        <AppNav />
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <div>
+              <CardTitle>Articles</CardTitle>
+              <CardDescription>Catalogue de votre organisation</CardDescription>
+            </div>
+            {canWrite &&
+              (hasUnits ? (
+                <NewProductDialog
+                  organizationId={profile.organization_id}
+                  categories={categories}
+                  brands={brands}
+                  units={units}
+                  onCreated={load}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Créez d&apos;abord une unité dans le Catalogue.
+                </p>
+              ))}
+          </CardHeader>
+          <CardContent>
+            {loadingData ? (
+              <p className="text-sm text-muted-foreground">Chargement…</p>
+            ) : products.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Aucun article.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Désignation</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Unité de base</TableHead>
+                    <TableHead>Prix de vente</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {products.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell>{p.label}</TableCell>
+                      <TableCell className="text-muted-foreground">{p.code}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {units.find((u) => u.id === p.base_unit_id)?.label ?? "—"}
+                      </TableCell>
+                      <TableCell>{p.sale_price}</TableCell>
+                      <TableCell>
+                        <Badge variant={p.status === "active" ? "secondary" : "outline"}>{p.status}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <ProductUnitsDialog product={p} units={units} canWrite={canWrite} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

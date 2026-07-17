@@ -324,3 +324,92 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function handle_new_user();
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- PHASE 3 : ARTICLES, UNITÉS ET STOCK
+-- ─────────────────────────────────────────────────────────────────────────
+
+create policy "admin write" on stores for all using (
+  organization_id = my_organization_id() and my_role() in ('admin', 'manager', 'super_admin')
+);
+create policy "admin write" on warehouses for all using (
+  organization_id = my_organization_id() and my_role() in ('admin', 'manager', 'super_admin')
+);
+create policy "admin write" on customers for all using (
+  organization_id = my_organization_id() and my_role() in ('admin', 'manager', 'super_admin', 'cashier')
+);
+create policy "admin write" on suppliers for all using (
+  organization_id = my_organization_id() and my_role() in ('admin', 'manager', 'super_admin')
+);
+create policy "admin write" on product_units for all using (
+  exists (select 1 from products p where p.id = product_id and p.organization_id = my_organization_id()
+    and my_role() in ('admin', 'manager', 'super_admin'))
+);
+
+-- Le stock lui-même ne s'écrit jamais directement : uniquement via
+-- record_stock_movement() (security definer), pour garantir que quantity
+-- reste toujours la somme exacte des mouvements. Pas de policy d'écriture
+-- directe sur stocks/stock_movements — la RPC contourne RLS.
+
+alter table stock_movements add column if not exists idempotency_key uuid unique;
+
+create or replace function record_stock_movement(
+  p_product_id uuid,
+  p_warehouse_id uuid,
+  p_type stock_movement_type,
+  p_quantity numeric,
+  p_reason text default '',
+  p_idempotency_key uuid default gen_random_uuid()
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_existing uuid;
+  v_movement_id uuid;
+  v_org uuid;
+  v_previous numeric;
+  v_new numeric;
+  v_delta numeric;
+begin
+  select id into v_existing from stock_movements where idempotency_key = p_idempotency_key;
+  if found then return v_existing; end if;
+
+  if my_role() not in ('admin', 'manager', 'super_admin', 'warehouse_keeper') then
+    raise exception 'Rôle non autorisé à modifier le stock';
+  end if;
+
+  select organization_id into v_org from products where id = p_product_id;
+  if v_org is null or v_org <> my_organization_id() then
+    raise exception 'Article introuvable';
+  end if;
+  if not exists (
+    select 1 from warehouses where id = p_warehouse_id and organization_id = my_organization_id()
+  ) then
+    raise exception 'Dépôt introuvable';
+  end if;
+
+  v_delta := case
+    when p_type in ('purchase_receipt', 'customer_return', 'transfer_in', 'inventory_count') then p_quantity
+    when p_type in ('sale', 'breakage', 'loss', 'theft', 'supplier_return', 'transfer_out') then -p_quantity
+    else p_quantity
+  end;
+
+  insert into stocks (product_id, warehouse_id, quantity)
+  values (p_product_id, p_warehouse_id, 0)
+  on conflict (product_id, warehouse_id) do nothing;
+
+  select quantity into v_previous from stocks
+    where product_id = p_product_id and warehouse_id = p_warehouse_id for update;
+  v_new := v_previous + v_delta;
+
+  update stocks set quantity = v_new, updated_at = now()
+    where product_id = p_product_id and warehouse_id = p_warehouse_id;
+
+  insert into stock_movements (
+    product_id, warehouse_id, author, type, quantity, previous_qty, new_qty, reason, idempotency_key
+  ) values (
+    p_product_id, p_warehouse_id, auth.uid(), p_type, v_delta, v_previous, v_new, coalesce(p_reason, ''), p_idempotency_key
+  ) returning id into v_movement_id;
+
+  return v_movement_id;
+end;
+$$;

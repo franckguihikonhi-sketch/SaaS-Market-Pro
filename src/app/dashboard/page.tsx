@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
 import { useSession, type Profile } from "@/lib/use-session";
 
@@ -90,6 +91,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-muted/30 p-8">
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
+        <AppNav />
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">{organizationName || "Market-Pro"}</h1>
