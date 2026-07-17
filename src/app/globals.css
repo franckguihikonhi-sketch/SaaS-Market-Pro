@@ -128,3 +128,28 @@
     @apply font-sans;
   }
 }
+
+/* Ticket de caisse thermique 80mm : seul #receipt-80mm est imprimé. */
+#receipt-80mm {
+  display: none;
+}
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #receipt-80mm,
+  #receipt-80mm * {
+    visibility: visible;
+  }
+  #receipt-80mm {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 80mm;
+  }
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+}

@@ -73,6 +73,17 @@ type TicketLine = {
 
 type HeldSale = { id: string; total: number; created_at: string };
 
+type Receipt = {
+  id: string;
+  organizationName: string;
+  storeName: string;
+  createdAt: string;
+  lines: { label: string; unitLabel: string; quantity: number; unit_price: number }[];
+  subtotal: number;
+  tax: number;
+  total: number;
+};
+
 export default function PosPage() {
   const router = useRouter();
   const { session, profile, loading } = useSession();
@@ -92,6 +103,8 @@ export default function PosPage() {
   const [busy, setBusy] = useState(false);
   const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
   const [heldOpen, setHeldOpen] = useState(false);
+  const [organizationName, setOrganizationName] = useState("");
+  const [lastReceipt, setLastReceipt] = useState<Receipt | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -101,7 +114,8 @@ export default function PosPage() {
 
   const loadBase = useCallback(async () => {
     if (!profile) return;
-    const [{ data: s }, { data: w }, { data: u }, { data: p }, { data: pu }] = await Promise.all([
+    const [{ data: org }, { data: s }, { data: w }, { data: u }, { data: p }, { data: pu }] = await Promise.all([
+      supabase.from("organizations").select("name").eq("id", profile.organization_id).single(),
       supabase.from("stores").select("id, name").eq("organization_id", profile.organization_id).order("name"),
       supabase.from("warehouses").select("id, name, store_id").eq("organization_id", profile.organization_id).order("name"),
       supabase.from("units").select("id, label").eq("organization_id", profile.organization_id),
@@ -113,6 +127,7 @@ export default function PosPage() {
         .order("label"),
       supabase.from("product_units").select("id, product_id, unit_id, coefficient_to_base, barcode"),
     ]);
+    setOrganizationName(org?.name ?? "");
     setStores((s as Store[]) ?? []);
     setWarehouses((w as Warehouse[]) ?? []);
     setUnits((u as Unit[]) ?? []);
@@ -254,6 +269,23 @@ export default function PosPage() {
     if (error) {
       setError(error.message);
       return;
+    }
+    if (status === "completed") {
+      setLastReceipt({
+        id: crypto.randomUUID(),
+        organizationName,
+        storeName: stores.find((s) => s.id === storeId)?.name ?? "",
+        createdAt: new Date().toISOString(),
+        lines: ticket.map((l) => ({
+          label: l.label,
+          unitLabel: l.unitLabel,
+          quantity: l.quantity,
+          unit_price: l.unit_price,
+        })),
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        total: totals.total,
+      });
     }
     setMessage(status === "held" ? "Ticket mis en attente." : "Vente enregistrée.");
     clearTicket();
@@ -539,7 +571,16 @@ export default function PosPage() {
                 </div>
 
                 {error && <p className="text-sm text-destructive">{error}</p>}
-                {message && <p className="text-sm text-emerald-600">{message}</p>}
+                {message && (
+                  <div className="flex items-center gap-2 text-sm text-emerald-600">
+                    <span>{message}</span>
+                    {lastReceipt && (
+                      <Button variant="outline" size="sm" onClick={() => window.print()}>
+                        Imprimer le ticket (80mm)
+                      </Button>
+                    )}
+                  </div>
+                )}
                 {ticket.length > 0 && <Badge variant="outline">{ticket.length} ligne(s)</Badge>}
 
                 <div className="flex justify-end gap-2">
@@ -558,6 +599,42 @@ export default function PosPage() {
           </CardContent>
         </Card>
       </div>
+
+      {lastReceipt && (
+        <div id="receipt-80mm" className="font-mono text-[11px] leading-tight text-black">
+          <div className="p-2">
+            <p className="text-center text-sm font-bold">{lastReceipt.organizationName}</p>
+            <p className="text-center">{lastReceipt.storeName}</p>
+            <p className="text-center">{new Date(lastReceipt.createdAt).toLocaleString("fr-FR")}</p>
+            <hr className="my-1 border-dashed border-black" />
+            {lastReceipt.lines.map((l, i) => (
+              <div key={i} className="mb-1">
+                <div>{l.label}</div>
+                <div className="flex justify-between">
+                  <span>
+                    {l.quantity} {l.unitLabel} × {l.unit_price.toFixed(2)}
+                  </span>
+                  <span>{(l.quantity * l.unit_price).toFixed(2)}</span>
+                </div>
+              </div>
+            ))}
+            <hr className="my-1 border-dashed border-black" />
+            <div className="flex justify-between">
+              <span>Sous-total</span>
+              <span>{lastReceipt.subtotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>TVA</span>
+              <span>{lastReceipt.tax.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm font-bold">
+              <span>TOTAL</span>
+              <span>{lastReceipt.total.toFixed(2)}</span>
+            </div>
+            <p className="mt-2 text-center">Merci de votre visite !</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
