@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/stores", label: "Magasins" },
   { href: "/products", label: "Articles" },
   { href: "/stock", label: "Stock" },
+  { href: "/reports", label: "Rapports" },
 ];
 
 export function AppNav() {

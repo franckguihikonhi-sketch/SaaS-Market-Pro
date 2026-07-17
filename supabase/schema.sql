@@ -416,6 +416,9 @@ $$;
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- PHASE 4 : VENTES (ÉCRAN DE CAISSE)
+-- PHASE 5 : RÈGLEMENTS MULTI-MODES ET COMPTES CLIENTS (sale_payments,
+-- paiement crédit avec vérification du plafond) — fusionnés ici car
+-- record_sale() est une seule fonction, réécrite en une fois.
 -- ─────────────────────────────────────────────────────────────────────────
 
 create table sales (
@@ -447,11 +450,23 @@ create table sale_lines (
 );
 create index on sale_lines (sale_id);
 
+create table sale_payments (
+  id uuid primary key default gen_random_uuid(),
+  sale_id uuid not null references sales on delete cascade,
+  method text not null check (method in ('cash', 'card', 'mobile_money', 'credit', 'check')),
+  amount numeric(14,2) not null check (amount > 0)
+);
+create index on sale_payments (sale_id);
+
 alter table sales enable row level security;
 alter table sale_lines enable row level security;
+alter table sale_payments enable row level security;
 
 create policy "org read" on sales for select using (organization_id = my_organization_id());
 create policy "org read" on sale_lines for select using (
+  exists (select 1 from sales s where s.id = sale_id and s.organization_id = my_organization_id())
+);
+create policy "org read" on sale_payments for select using (
   exists (select 1 from sales s where s.id = sale_id and s.organization_id = my_organization_id())
 );
 
@@ -468,6 +483,7 @@ create or replace function record_sale(
   p_status text,
   p_lines jsonb,
   p_customer_id uuid default null,
+  p_payments jsonb default null,
   p_idempotency_key uuid default gen_random_uuid()
 ) returns uuid
 language plpgsql security definer set search_path = public as $$
@@ -475,15 +491,21 @@ declare
   v_existing uuid;
   v_sale_id uuid;
   v_line jsonb;
+  v_payment jsonb;
   v_product products%rowtype;
   v_unit product_units%rowtype;
+  v_customer customers%rowtype;
   v_coefficient numeric;
   v_base_qty numeric;
   v_line_total numeric;
   v_subtotal numeric := 0;
   v_tax_total numeric := 0;
+  v_total numeric;
+  v_paid numeric := 0;
   v_available numeric;
   v_label text;
+  v_method text;
+  v_amount numeric;
 begin
   select id into v_existing from sales where idempotency_key = p_idempotency_key;
   if found then return v_existing; end if;
@@ -555,8 +577,46 @@ begin
     end if;
   end loop;
 
-  update sales set subtotal = v_subtotal, tax_total = v_tax_total, total = v_subtotal + v_tax_total
-    where id = v_sale_id;
+  v_total := v_subtotal + v_tax_total;
+  update sales set subtotal = v_subtotal, tax_total = v_tax_total, total = v_total where id = v_sale_id;
+
+  if p_status = 'completed' then
+    if p_payments is null or jsonb_array_length(p_payments) = 0 then
+      raise exception 'Règlement requis';
+    end if;
+
+    for v_payment in select * from jsonb_array_elements(p_payments)
+    loop
+      v_method := v_payment->>'method';
+      v_amount := (v_payment->>'amount')::numeric;
+      if v_method not in ('cash', 'card', 'mobile_money', 'credit', 'check') then
+        raise exception 'Mode de règlement invalide : %', v_method;
+      end if;
+      if v_amount is null or v_amount <= 0 then
+        raise exception 'Montant de règlement invalide';
+      end if;
+
+      if v_method = 'credit' then
+        if p_customer_id is null then
+          raise exception 'Un client est requis pour un règlement à crédit';
+        end if;
+        select * into v_customer from customers
+          where id = p_customer_id and organization_id = my_organization_id() for update;
+        if not found then raise exception 'Client introuvable'; end if;
+        if v_customer.balance + v_amount > v_customer.credit_limit then
+          raise exception 'Plafond de crédit dépassé pour %', v_customer.name;
+        end if;
+        update customers set balance = balance + v_amount where id = p_customer_id;
+      end if;
+
+      insert into sale_payments (sale_id, method, amount) values (v_sale_id, v_method, v_amount);
+      v_paid := v_paid + v_amount;
+    end loop;
+
+    if abs(v_paid - v_total) > 0.01 then
+      raise exception 'Le montant réglé (%) ne correspond pas au total (%)', v_paid, v_total;
+    end if;
+  end if;
 
   return v_sale_id;
 end;

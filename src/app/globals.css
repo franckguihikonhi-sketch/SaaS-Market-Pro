@@ -129,27 +129,38 @@
   }
 }
 
-/* Ticket de caisse thermique 80mm : seul #receipt-80mm est imprimé. */
-#receipt-80mm {
+/* Impression : ticket thermique 80mm (#receipt-80mm) ou facture A4
+   (#invoice-a4). La taille de page (@page) est injectée dynamiquement en
+   JS juste avant l'impression (voir printWithTarget dans /pos), car @page
+   ne peut pas être conditionné par un sélecteur en CSS pur. */
+#receipt-80mm,
+#invoice-a4 {
   display: none;
 }
 @media print {
   body * {
     visibility: hidden;
   }
-  #receipt-80mm,
-  #receipt-80mm * {
+  html[data-print-target="80mm"] #receipt-80mm,
+  html[data-print-target="80mm"] #receipt-80mm * {
     visibility: visible;
   }
-  #receipt-80mm {
+  html[data-print-target="80mm"] #receipt-80mm {
     display: block;
     position: absolute;
     top: 0;
     left: 0;
     width: 80mm;
   }
-  @page {
-    size: 80mm auto;
-    margin: 0;
+  html[data-print-target="a4"] #invoice-a4,
+  html[data-print-target="a4"] #invoice-a4 * {
+    visibility: visible;
+  }
+  html[data-print-target="a4"] #invoice-a4 {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 210mm;
   }
 }
