@@ -373,12 +373,12 @@ begin
   select id into v_existing from stock_movements where idempotency_key = p_idempotency_key;
   if found then return v_existing; end if;
 
-  if my_role() not in ('admin', 'manager', 'super_admin', 'warehouse_keeper') then
+  if coalesce(my_role() in ('admin', 'manager', 'super_admin', 'warehouse_keeper'), false) is not true then
     raise exception 'Rôle non autorisé à modifier le stock';
   end if;
 
   select organization_id into v_org from products where id = p_product_id;
-  if v_org is null or v_org <> my_organization_id() then
+  if v_org is null or v_org is distinct from my_organization_id() then
     raise exception 'Article introuvable';
   end if;
   if not exists (
