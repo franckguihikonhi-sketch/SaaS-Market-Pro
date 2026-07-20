@@ -439,7 +439,11 @@ export default function PosPage() {
             </div>
             <div className="flex items-center gap-2">
               {stores.length > 0 && (
-                <Select value={storeId} onValueChange={(v) => v && setStoreId(v)}>
+                <Select
+                  items={stores.map((s) => ({ value: s.id, label: s.name }))}
+                  value={storeId}
+                  onValueChange={(v) => v && setStoreId(v)}
+                >
                   <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
@@ -453,7 +457,11 @@ export default function PosPage() {
                 </Select>
               )}
               {warehouses.length > 0 && (
-                <Select value={warehouseId} onValueChange={(v) => v && setWarehouseId(v)}>
+                <Select
+                  items={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+                  value={warehouseId}
+                  onValueChange={(v) => v && setWarehouseId(v)}
+                >
                   <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
@@ -546,6 +554,16 @@ export default function PosPage() {
                           <TableCell>
                             {productUnitsFor(l.product_id).length > 0 ? (
                               <Select
+                                items={[
+                                  {
+                                    value: "base",
+                                    label: unitLabel(products.find((p) => p.id === l.product_id)?.base_unit_id ?? ""),
+                                  },
+                                  ...productUnitsFor(l.product_id).map((pu) => ({
+                                    value: pu.id,
+                                    label: unitLabel(pu.unit_id),
+                                  })),
+                                ]}
                                 value={l.product_unit_id ?? "base"}
                                 onValueChange={(v) => {
                                   if (!v) return;
@@ -621,7 +639,14 @@ export default function PosPage() {
                 <div className="flex flex-wrap items-end justify-between gap-4 border-t pt-3">
                   <div className="flex flex-col gap-2">
                     <span className="text-xs text-muted-foreground">Client (optionnel)</span>
-                    <Select value={customerId} onValueChange={(v) => v && setCustomerId(v)}>
+                    <Select
+                      items={[
+                        { value: "none", label: "Client de passage" },
+                        ...customers.map((c) => ({ value: c.id, label: c.name })),
+                      ]}
+                      value={customerId}
+                      onValueChange={(v) => v && setCustomerId(v)}
+                    >
                       <SelectTrigger className="w-48">
                         <SelectValue />
                       </SelectTrigger>
@@ -698,6 +723,7 @@ export default function PosPage() {
                 <div className="flex flex-1 flex-col gap-2">
                   <span className="text-xs text-muted-foreground">Mode</span>
                   <Select
+                    items={PAYMENT_METHODS}
                     value={p.method}
                     onValueChange={(v) =>
                       v &&

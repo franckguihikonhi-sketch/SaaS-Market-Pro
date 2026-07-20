@@ -123,7 +123,11 @@ function RecordMovementDialog({
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
             <Label>Article</Label>
-            <Select value={productId} onValueChange={(v) => v && setProductId(v)}>
+            <Select
+              items={products.map((p) => ({ value: p.id, label: p.label }))}
+              value={productId}
+              onValueChange={(v) => v && setProductId(v)}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Choisir un article" />
               </SelectTrigger>
@@ -138,7 +142,7 @@ function RecordMovementDialog({
           </div>
           <div className="flex flex-col gap-2">
             <Label>Type de mouvement</Label>
-            <Select value={type} onValueChange={(v) => v && setType(v)}>
+            <Select items={MOVEMENT_TYPES} value={type} onValueChange={(v) => v && setType(v)}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -249,7 +253,11 @@ export default function StockPage() {
             </div>
             <div className="flex items-center gap-2">
               {warehouses.length > 0 && (
-                <Select value={warehouseId} onValueChange={(v) => v && setWarehouseId(v)}>
+                <Select
+                  items={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+                  value={warehouseId}
+                  onValueChange={(v) => v && setWarehouseId(v)}
+                >
                   <SelectTrigger className="w-48">
                     <SelectValue />
                   </SelectTrigger>

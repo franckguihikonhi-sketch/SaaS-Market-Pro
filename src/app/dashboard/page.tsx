@@ -135,6 +135,7 @@ export default function DashboardPage() {
                       <TableCell>
                         {isAdmin && colleague.id !== profile.id ? (
                           <Select
+                            items={ROLES.map((role) => ({ value: role, label: role }))}
                             value={colleague.role}
                             onValueChange={(role) => role && void updateRole(colleague.id, role)}
                           >

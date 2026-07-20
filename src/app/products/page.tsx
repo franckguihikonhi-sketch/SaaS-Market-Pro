@@ -169,7 +169,11 @@ function ProductUnitsDialog({
           <form onSubmit={addUnit} className="flex flex-col gap-3 border-t pt-3">
             <div className="flex flex-col gap-2">
               <Label>Unité</Label>
-              <Select value={unitId} onValueChange={(v) => v && setUnitId(v)}>
+              <Select
+                items={availableUnits.map((u) => ({ value: u.id, label: u.label }))}
+                value={unitId}
+                onValueChange={(v) => v && setUnitId(v)}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Choisir une unité" />
                 </SelectTrigger>
@@ -300,7 +304,11 @@ function NewProductDialog({
           <div className="flex gap-2">
             <div className="flex flex-1 flex-col gap-2">
               <Label>Catégorie</Label>
-              <Select value={categoryId} onValueChange={(v) => v && setCategoryId(v)}>
+              <Select
+                items={[{ value: "none", label: "Aucune" }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
+                value={categoryId}
+                onValueChange={(v) => v && setCategoryId(v)}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -316,7 +324,11 @@ function NewProductDialog({
             </div>
             <div className="flex flex-1 flex-col gap-2">
               <Label>Marque</Label>
-              <Select value={brandId} onValueChange={(v) => v && setBrandId(v)}>
+              <Select
+                items={[{ value: "none", label: "Aucune" }, ...brands.map((b) => ({ value: b.id, label: b.name }))]}
+                value={brandId}
+                onValueChange={(v) => v && setBrandId(v)}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -333,7 +345,11 @@ function NewProductDialog({
           </div>
           <div className="flex flex-col gap-2">
             <Label>Unité de base</Label>
-            <Select value={baseUnitId} onValueChange={(v) => v && setBaseUnitId(v)}>
+            <Select
+              items={units.map((u) => ({ value: u.id, label: u.label }))}
+              value={baseUnitId}
+              onValueChange={(v) => v && setBaseUnitId(v)}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Choisir une unité" />
               </SelectTrigger>

@@ -202,7 +202,11 @@ export default function StoresPage() {
                 </div>
                 <div className="flex flex-col gap-2">
                   <Label>Magasin</Label>
-                  <Select value={whStoreId} onValueChange={(v) => v && setWhStoreId(v)}>
+                  <Select
+                    items={[{ value: "none", label: "Aucun" }, ...stores.map((s) => ({ value: s.id, label: s.name }))]}
+                    value={whStoreId}
+                    onValueChange={(v) => v && setWhStoreId(v)}
+                  >
                     <SelectTrigger className="w-40">
                       <SelectValue />
                     </SelectTrigger>
