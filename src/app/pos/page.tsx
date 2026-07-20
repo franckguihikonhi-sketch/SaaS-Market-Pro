@@ -4,22 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -36,6 +20,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { AppNav } from "@/components/app-nav";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useSession } from "@/lib/use-session";
 
@@ -64,17 +49,19 @@ type TicketLine = {
   key: string;
   product_id: string;
   product_unit_id: string | null;
+  code: string;
   label: string;
   unitLabel: string;
   quantity: number;
   unit_price: number;
+  discount: number;
   tax_rate: number;
 };
 
 type HeldSale = { id: string; total: number; created_at: string };
 type Customer = { id: string; name: string };
 type PaymentMethod = "cash" | "card" | "mobile_money" | "credit" | "check";
-type PaymentLine = { key: string; method: PaymentMethod; amount: number };
+type PaymentLine = { key: string; method: PaymentMethod; amount: number; auto: boolean };
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "cash", label: "Espèces" },
@@ -96,6 +83,10 @@ type Receipt = {
   total: number;
   payments: PaymentLine[];
 };
+
+function lineAmount(l: TicketLine) {
+  return l.quantity * l.unit_price * (1 - l.discount / 100);
+}
 
 function printWithTarget(target: "80mm" | "a4") {
   document.documentElement.setAttribute("data-print-target", target);
@@ -124,18 +115,23 @@ export default function PosPage() {
   const [warehouseId, setWarehouseId] = useState("");
 
   const [query, setQuery] = useState("");
+  const [pendingQty, setPendingQty] = useState("1");
+  const [pendingDiscount, setPendingDiscount] = useState("0");
+  const [pendingUnitId, setPendingUnitId] = useState("base");
+  const [editingKey, setEditingKey] = useState<string | null>(null);
   const [ticket, setTicket] = useState<TicketLine[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
   const [heldOpen, setHeldOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [organizationName, setOrganizationName] = useState("");
   const [lastReceipt, setLastReceipt] = useState<Receipt | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState<string>("none");
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [payments, setPayments] = useState<PaymentLine[]>([]);
+  const [cashReceived, setCashReceived] = useState("");
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -185,6 +181,11 @@ export default function PosPage() {
     [units]
   );
 
+  const productUnitsFor = useCallback(
+    (productId: string) => productUnits.filter((pu) => pu.product_id === productId),
+    [productUnits]
+  );
+
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
@@ -213,15 +214,37 @@ export default function PosPage() {
     return null;
   }, [query, products, productUnits]);
 
-  function addLine(product: Product, productUnitId: string | null) {
+  const selectedLine = editingKey ? ticket.find((l) => l.key === editingKey) ?? null : null;
+  const matchedProduct = editingKey ? null : exactMatch?.product ?? (matches.length === 1 ? matches[0] : null);
+  const entryProduct = editingKey
+    ? selectedLine
+      ? products.find((p) => p.id === selectedLine.product_id) ?? null
+      : null
+    : matchedProduct;
+
+  function resetEntry() {
+    setQuery("");
+    setPendingQty("1");
+    setPendingDiscount("0");
+    setPendingUnitId("base");
+    setEditingKey(null);
+    setError(null);
+    searchRef.current?.focus();
+  }
+
+  function addOrUpdateLine(product: Product, productUnitId: string | null, quantity: number, discount: number) {
     const coeff = productUnitId
       ? productUnits.find((pu) => pu.id === productUnitId)?.coefficient_to_base ?? 1
       : 1;
-    const label = productUnitId ? unitLabel(productUnits.find((pu) => pu.id === productUnitId)?.unit_id ?? "") : unitLabel(product.base_unit_id);
+    const unitLbl = productUnitId
+      ? unitLabel(productUnits.find((pu) => pu.id === productUnitId)?.unit_id ?? "")
+      : unitLabel(product.base_unit_id);
     setTicket((cur) => {
       const existing = cur.find((l) => l.product_id === product.id && l.product_unit_id === productUnitId);
       if (existing) {
-        return cur.map((l) => (l === existing ? { ...l, quantity: l.quantity + 1 } : l));
+        return cur.map((l) =>
+          l === existing ? { ...l, quantity: l.quantity + quantity, discount } : l
+        );
       }
       return [
         ...cur,
@@ -229,61 +252,131 @@ export default function PosPage() {
           key: crypto.randomUUID(),
           product_id: product.id,
           product_unit_id: productUnitId,
+          code: product.code,
           label: product.label,
-          unitLabel: label,
-          quantity: 1,
+          unitLabel: unitLbl,
+          quantity,
           unit_price: product.sale_price * coeff,
+          discount,
           tax_rate: product.tax_rate,
         },
       ];
     });
-    setQuery("");
-    setError(null);
-    searchRef.current?.focus();
+    resetEntry();
   }
 
-  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  function confirmEntry() {
+    const qty = Number(pendingQty) || 0;
+    const discount = Number(pendingDiscount) || 0;
+    if (qty <= 0) {
+      setError("Quantité invalide.");
+      return;
+    }
+    if (editingKey) {
+      const line = ticket.find((l) => l.key === editingKey);
+      const product = line ? products.find((p) => p.id === line.product_id) : undefined;
+      if (!line || !product) {
+        resetEntry();
+        return;
+      }
+      const productUnitId = pendingUnitId === "base" ? null : pendingUnitId;
+      const coeff = productUnitId
+        ? productUnits.find((pu) => pu.id === productUnitId)?.coefficient_to_base ?? 1
+        : 1;
+      const unitLbl = productUnitId
+        ? unitLabel(productUnits.find((pu) => pu.id === productUnitId)?.unit_id ?? "")
+        : unitLabel(product.base_unit_id);
+      updateLine(editingKey, {
+        quantity: qty,
+        discount,
+        product_unit_id: productUnitId,
+        unit_price: product.sale_price * coeff,
+        unitLabel: unitLbl,
+      });
+      resetEntry();
+      return;
+    }
+    if (matchedProduct) {
+      const productUnitId = exactMatch?.productUnitId ?? (pendingUnitId === "base" ? null : pendingUnitId);
+      addOrUpdateLine(matchedProduct, productUnitId, qty, discount);
+    } else {
+      setError("Article introuvable.");
+    }
+  }
+
+  function handleReferenceChange(value: string) {
+    if (editingKey) setEditingKey(null);
+    setQuery(value);
+  }
+
+  function handleReferenceKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
     e.preventDefault();
-    if (exactMatch) {
-      addLine(exactMatch.product, exactMatch.productUnitId);
-    } else if (matches.length === 1) {
-      addLine(matches[0], null);
-    }
+    confirmEntry();
   }
 
   function updateLine(key: string, patch: Partial<TicketLine>) {
     setTicket((cur) => cur.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
 
-  function removeLine(key: string) {
-    setTicket((cur) => cur.filter((l) => l.key !== key));
+  function selectLine(l: TicketLine) {
+    setEditingKey(l.key);
+    setQuery("");
+    setPendingQty(String(l.quantity));
+    setPendingDiscount(String(l.discount));
+    setPendingUnitId(l.product_unit_id ?? "base");
+    setError(null);
+  }
+
+  function deleteSelected() {
+    if (!editingKey) return;
+    setTicket((cur) => cur.filter((l) => l.key !== editingKey));
+    resetEntry();
   }
 
   function clearTicket() {
     setTicket([]);
-    setError(null);
+    setPayments([]);
+    setCashReceived("");
+    resetEntry();
     setMessage(null);
   }
 
-  const productUnitsFor = useCallback(
-    (productId: string) => productUnits.filter((pu) => pu.product_id === productId),
-    [productUnits]
-  );
-
   const totals = useMemo(() => {
-    const subtotal = ticket.reduce((sum, l) => sum + l.quantity * l.unit_price, 0);
-    const tax = ticket.reduce((sum, l) => sum + (l.quantity * l.unit_price * l.tax_rate) / 100, 0);
+    const subtotal = ticket.reduce((sum, l) => sum + lineAmount(l), 0);
+    const tax = ticket.reduce((sum, l) => sum + (lineAmount(l) * l.tax_rate) / 100, 0);
     return { subtotal, tax, total: subtotal + tax };
   }, [ticket]);
 
-  async function submitTicket(status: "held" | "completed", checkoutPayments?: PaymentLine[]) {
+  const effectiveAmount = useCallback(
+    (p: PaymentLine) => (p.auto ? Number(totals.total.toFixed(2)) : p.amount),
+    [totals.total]
+  );
+  const paidTotal = useMemo(
+    () => payments.reduce((sum, p) => sum + effectiveAmount(p), 0),
+    [payments, effectiveAmount]
+  );
+  const displayedPayments: PaymentLine[] =
+    payments.length > 0
+      ? payments
+      : ticket.length > 0
+        ? [{ key: "auto", method: "cash", amount: Number(totals.total.toFixed(2)), auto: true }]
+        : [];
+  const paymentBalanced = ticket.length > 0 && Math.abs(paidTotal - totals.total) < 0.01;
+  const changeDue = Math.max(0, Number(cashReceived || 0) - totals.total);
+
+  async function submitTicket(status: "held" | "completed") {
     if (ticket.length === 0) {
       setError("Le ticket est vide.");
       return;
     }
     if (!storeId || !warehouseId) {
       setError("Choisissez un magasin et un dépôt.");
+      return;
+    }
+    const finalPayments = status === "completed" ? displayedPayments : [];
+    if (status === "completed" && !paymentBalanced) {
+      setError("Le montant réglé ne correspond pas au total.");
       return;
     }
     setBusy(true);
@@ -296,12 +389,12 @@ export default function PosPage() {
         product_id: l.product_id,
         product_unit_id: l.product_unit_id,
         quantity: l.quantity,
-        unit_price: l.unit_price,
+        unit_price: l.unit_price * (1 - l.discount / 100),
       })),
       p_customer_id: customerId === "none" ? null : customerId,
       p_payments:
         status === "completed"
-          ? checkoutPayments?.map((p) => ({ method: p.method, amount: p.amount })) ?? null
+          ? finalPayments.map((p) => ({ method: p.method, amount: effectiveAmount(p) }))
           : null,
     });
     setBusy(false);
@@ -320,36 +413,22 @@ export default function PosPage() {
           label: l.label,
           unitLabel: l.unitLabel,
           quantity: l.quantity,
-          unit_price: l.unit_price,
+          unit_price: l.unit_price * (1 - l.discount / 100),
         })),
         subtotal: totals.subtotal,
         tax: totals.tax,
         total: totals.total,
-        payments: checkoutPayments ?? [],
+        payments: finalPayments.map((p) => ({ ...p, amount: effectiveAmount(p) })),
       });
-      setCheckoutOpen(false);
     }
     setMessage(status === "held" ? "Ticket mis en attente." : "Vente enregistrée.");
-    clearTicket();
+    setTicket([]);
+    setPayments([]);
+    setCashReceived("");
+    resetEntry();
     setCustomerId("none");
-    setTimeout(() => setMessage(null), 3000);
+    setTimeout(() => setMessage(null), 4000);
   }
-
-  function openCheckout() {
-    if (ticket.length === 0) {
-      setError("Le ticket est vide.");
-      return;
-    }
-    if (!storeId || !warehouseId) {
-      setError("Choisissez un magasin et un dépôt.");
-      return;
-    }
-    setPayments([{ key: crypto.randomUUID(), method: "cash", amount: Number(totals.total.toFixed(2)) }]);
-    setCheckoutOpen(true);
-  }
-
-  const paidTotal = useMemo(() => payments.reduce((sum, p) => sum + p.amount, 0), [payments]);
-  const paymentBalanced = Math.abs(paidTotal - totals.total) < 0.01;
 
   const loadHeldSales = useCallback(async () => {
     if (!profile) return;
@@ -381,19 +460,21 @@ export default function PosPage() {
           key: crypto.randomUUID(),
           product_id: l.product_id,
           product_unit_id: l.product_unit_id,
+          code: products.find((p) => p.id === l.product_id)?.code ?? "",
           label: l.label,
           unitLabel: l.product_unit_id
             ? unitLabel(productUnits.find((pu) => pu.id === l.product_unit_id)?.unit_id ?? "")
             : unitLabel(products.find((p) => p.id === l.product_id)?.base_unit_id ?? ""),
           quantity: Number(l.quantity),
           unit_price: Number(l.unit_price),
+          discount: 0,
           tax_rate: Number(l.tax_rate),
         }))
       );
     }
     await supabase.from("sales").delete().eq("id", saleId);
     setHeldOpen(false);
-    searchRef.current?.focus();
+    resetEntry();
   }
 
   useEffect(() => {
@@ -406,7 +487,7 @@ export default function PosPage() {
         void submitTicket("held");
       } else if (e.key === "F9") {
         e.preventDefault();
-        openCheckout();
+        void submitTicket("completed");
       } else if (e.key === "Escape" && document.activeElement !== searchRef.current) {
         e.preventDefault();
         clearTicket();
@@ -415,7 +496,7 @@ export default function PosPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticket, storeId, warehouseId, totals.total]);
+  }, [ticket, storeId, warehouseId, displayedPayments, paymentBalanced]);
 
   if (loading || !session || !profile) {
     return (
@@ -425,104 +506,113 @@ export default function PosPage() {
     );
   }
 
+  const noSetup = stores.length === 0 || warehouses.length === 0;
+
   return (
-    <div className="min-h-screen bg-muted/30 p-8">
-      <div className="mx-auto flex max-w-4xl flex-col gap-6">
+    <div className="min-h-screen bg-muted/30 p-4">
+      <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <AppNav />
-        <Card>
-          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
-            <div>
-              <CardTitle>Caisse</CardTitle>
-              <CardDescription>
-                F2 rechercher · F4 mettre en attente · F9 encaisser · Échap annuler
-              </CardDescription>
+
+        {noSetup ? (
+          <div className="rounded-md border bg-white p-6 text-sm text-muted-foreground">
+            Créez d&apos;abord un magasin et un dépôt dans la page Magasins.
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-md border border-slate-400 bg-slate-100 shadow-lg">
+            {/* Barre de titre */}
+            <div className="flex items-center justify-between bg-gradient-to-b from-slate-600 to-slate-700 px-3 py-1.5 text-white">
+              <span className="text-sm font-medium">
+                Ticket de caisse — {stores.find((s) => s.id === storeId)?.name ?? "Magasin"}
+              </span>
+              <div className="flex gap-1">
+                <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-white/20 text-[10px]">
+                  _
+                </span>
+                <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-white/20 text-[10px]">
+                  □
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              {stores.length > 0 && (
-                <Select
-                  items={stores.map((s) => ({ value: s.id, label: s.name }))}
-                  value={storeId}
-                  onValueChange={(v) => v && setStoreId(v)}
-                >
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stores.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              {warehouses.length > 0 && (
-                <Select
-                  items={warehouses.map((w) => ({ value: w.id, label: w.name }))}
-                  value={warehouseId}
-                  onValueChange={(v) => v && setWarehouseId(v)}
-                >
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {warehouses.map((w) => (
-                      <SelectItem key={w.id} value={w.id}>
-                        {w.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <Dialog open={heldOpen} onOpenChange={setHeldOpen}>
-                <DialogTrigger render={<Button variant="outline" />}>Tickets en attente</DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Tickets en attente</DialogTitle>
-                    <DialogDescription>Cliquez pour reprendre un ticket.</DialogDescription>
-                  </DialogHeader>
-                  {heldSales.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Aucun ticket en attente.</p>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {heldSales.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => void resumeHeldSale(s.id)}
-                          className="flex items-center justify-between rounded-md border p-2 text-left text-sm hover:bg-muted"
-                        >
-                          <span>{new Date(s.created_at).toLocaleString("fr-FR")}</span>
-                          <span className="font-medium">{s.total}</span>
-                        </button>
-                      ))}
-                    </div>
+
+            <div className="flex flex-col gap-3 p-3">
+              {/* En-tête : caissier / date / total */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-4 text-sm">
+                  <span>
+                    Caissier <strong>{profile.full_name}</strong>
+                  </span>
+                  <span>Date {new Date().toLocaleDateString("fr-FR")}</span>
+                  {stores.length > 1 && (
+                    <Select
+                      items={stores.map((s) => ({ value: s.id, label: s.name }))}
+                      value={storeId}
+                      onValueChange={(v) => v && setStoreId(v)}
+                    >
+                      <SelectTrigger className="h-7 w-36" size="sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stores.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {stores.length === 0 || warehouses.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Créez d&apos;abord un magasin et un dépôt dans la page Magasins.
-              </p>
-            ) : (
-              <>
-                <div className="relative">
+                  {warehouses.length > 1 && (
+                    <Select
+                      items={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+                      value={warehouseId}
+                      onValueChange={(v) => v && setWarehouseId(v)}
+                    >
+                      <SelectTrigger className="h-7 w-36" size="sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {warehouses.map((w) => (
+                          <SelectItem key={w.id} value={w.id}>
+                            {w.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 rounded-md bg-emerald-200 px-4 py-1.5">
+                  <span className="text-sm font-semibold text-emerald-900">Total TTC</span>
+                  <span className="text-2xl font-bold text-emerald-900">{totals.total.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Ligne de saisie */}
+              <div className="flex flex-wrap items-end gap-2 rounded-md border bg-white p-2">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] text-muted-foreground">Référence</span>
                   <Input
                     ref={searchRef}
-                    placeholder="Scanner un code-barres ou rechercher un article… (F2)"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={handleSearchKeyDown}
-                    autoFocus
+                    className="h-8 w-32"
+                    value={editingKey ? selectedLine?.code ?? "" : query}
+                    onChange={(e) => handleReferenceChange(e.target.value)}
+                    onKeyDown={handleReferenceKeyDown}
+                    placeholder="Code / scan (F2)"
+                    readOnly={!!editingKey}
                   />
-                  {query && matches.length > 0 && (
-                    <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-md">
+                </div>
+                <div className="relative flex flex-1 flex-col gap-1">
+                  <span className="text-[11px] text-muted-foreground">Désignation</span>
+                  <Input
+                    className="h-8"
+                    readOnly
+                    value={editingKey ? selectedLine?.label ?? "" : matchedProduct?.label ?? ""}
+                    placeholder={query && !matchedProduct ? "Aucun article correspondant" : ""}
+                  />
+                  {!editingKey && query && matches.length > 1 && (
+                    <div className="absolute top-full z-10 mt-1 w-full rounded-md border bg-popover shadow-md">
                       {matches.map((p) => (
                         <button
                           key={p.id}
-                          onClick={() => addLine(p, null)}
+                          onClick={() => addOrUpdateLine(p, null, Number(pendingQty) || 1, Number(pendingDiscount) || 0)}
                           className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted"
                         >
                           <span>{p.label}</span>
@@ -532,113 +622,214 @@ export default function PosPage() {
                     </div>
                   )}
                 </div>
+                {entryProduct && productUnitsFor(entryProduct.id).length > 0 && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[11px] text-muted-foreground">Unité</span>
+                    <Select
+                      items={[
+                        { value: "base", label: unitLabel(entryProduct.base_unit_id) },
+                        ...productUnitsFor(entryProduct.id).map((pu) => ({
+                          value: pu.id,
+                          label: unitLabel(pu.unit_id),
+                        })),
+                      ]}
+                      value={pendingUnitId}
+                      onValueChange={(v) => v && setPendingUnitId(v)}
+                    >
+                      <SelectTrigger className="h-8 w-28" size="sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="base">{unitLabel(entryProduct.base_unit_id)}</SelectItem>
+                        {productUnitsFor(entryProduct.id).map((pu) => (
+                          <SelectItem key={pu.id} value={pu.id}>
+                            {unitLabel(pu.unit_id)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] text-muted-foreground">Quantité</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    className="h-8 w-20"
+                    value={pendingQty}
+                    onChange={(e) => setPendingQty(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] text-muted-foreground">Remise %</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    className="h-8 w-20"
+                    value={pendingDiscount}
+                    onChange={(e) => setPendingDiscount(e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="sm" onClick={resetEntry}>
+                    Nouveau
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={deleteSelected} disabled={!editingKey}>
+                    Supprimer
+                  </Button>
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={confirmEntry}>
+                    Enregistrer
+                  </Button>
+                </div>
+              </div>
 
-                {ticket.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">Ticket vide.</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Article</TableHead>
-                        <TableHead>Unité</TableHead>
-                        <TableHead>Qté</TableHead>
-                        <TableHead>P.U.</TableHead>
-                        <TableHead>Total</TableHead>
-                        <TableHead />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ticket.map((l) => (
-                        <TableRow key={l.key}>
-                          <TableCell>{l.label}</TableCell>
-                          <TableCell>
-                            {productUnitsFor(l.product_id).length > 0 ? (
-                              <Select
-                                items={[
-                                  {
-                                    value: "base",
-                                    label: unitLabel(products.find((p) => p.id === l.product_id)?.base_unit_id ?? ""),
-                                  },
-                                  ...productUnitsFor(l.product_id).map((pu) => ({
-                                    value: pu.id,
-                                    label: unitLabel(pu.unit_id),
-                                  })),
-                                ]}
-                                value={l.product_unit_id ?? "base"}
-                                onValueChange={(v) => {
-                                  if (!v) return;
-                                  const product = products.find((p) => p.id === l.product_id);
-                                  if (!product) return;
-                                  if (v === "base") {
-                                    updateLine(l.key, {
-                                      product_unit_id: null,
-                                      unitLabel: unitLabel(product.base_unit_id),
-                                      unit_price: product.sale_price,
-                                    });
-                                  } else {
-                                    const pu = productUnits.find((u) => u.id === v);
-                                    if (!pu) return;
-                                    updateLine(l.key, {
-                                      product_unit_id: v,
-                                      unitLabel: unitLabel(pu.unit_id),
-                                      unit_price: product.sale_price * pu.coefficient_to_base,
-                                    });
-                                  }
-                                }}
-                              >
-                                <SelectTrigger className="w-32">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="base">
-                                    {unitLabel(products.find((p) => p.id === l.product_id)?.base_unit_id ?? "")}
+              {/* Grille du ticket */}
+              <div className="max-h-64 overflow-auto rounded-md border bg-white">
+                <table className="w-full text-left text-sm">
+                  <thead className="sticky top-0 bg-slate-200 text-xs uppercase text-slate-600">
+                    <tr>
+                      <th className="px-2 py-1.5">Référence</th>
+                      <th className="px-2 py-1.5">Désignation</th>
+                      <th className="px-2 py-1.5">Unité</th>
+                      <th className="px-2 py-1.5 text-right">P.U. TTC</th>
+                      <th className="px-2 py-1.5 text-right">Quantité</th>
+                      <th className="px-2 py-1.5 text-right">Remise</th>
+                      <th className="px-2 py-1.5 text-right">Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ticket.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-2 py-6 text-center text-muted-foreground">
+                          Ticket vide.
+                        </td>
+                      </tr>
+                    ) : (
+                      ticket.map((l) => (
+                        <tr
+                          key={l.key}
+                          onClick={() => selectLine(l)}
+                          className={cn(
+                            "cursor-pointer border-t hover:bg-muted",
+                            editingKey === l.key && "bg-emerald-50"
+                          )}
+                        >
+                          <td className="px-2 py-1">{l.code}</td>
+                          <td className="px-2 py-1">{l.label}</td>
+                          <td className="px-2 py-1">{l.unitLabel}</td>
+                          <td className="px-2 py-1 text-right">{l.unit_price.toFixed(2)}</td>
+                          <td className="px-2 py-1 text-right">{l.quantity}</td>
+                          <td className="px-2 py-1 text-right">{l.discount ? `${l.discount}%` : "—"}</td>
+                          <td className="px-2 py-1 text-right">{lineAmount(l).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Réglements + à rendre */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-md border bg-white p-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-600">Mode de règlement</span>
+                    <span className="text-xs text-muted-foreground">
+                      Réglé {paidTotal.toFixed(2)} / {totals.total.toFixed(2)}
+                    </span>
+                  </div>
+                  <table className="w-full text-left text-sm">
+                    <thead className="text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="py-1">Mode</th>
+                        <th className="py-1 text-right">Montant</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayedPayments.map((p) => (
+                        <tr key={p.key} className="border-t">
+                          <td className="py-1">
+                            <Select
+                              items={PAYMENT_METHODS}
+                              value={p.method}
+                              onValueChange={(v) => {
+                                if (!v) return;
+                                setPayments(
+                                  displayedPayments.map((x) =>
+                                    x.key === p.key ? { ...x, method: v as PaymentMethod } : x
+                                  )
+                                );
+                              }}
+                            >
+                              <SelectTrigger className="h-7 w-full" size="sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {PAYMENT_METHODS.map((m) => (
+                                  <SelectItem key={m.value} value={m.value}>
+                                    {m.label}
                                   </SelectItem>
-                                  {productUnitsFor(l.product_id).map((pu) => (
-                                    <SelectItem key={pu.id} value={pu.id}>
-                                      {unitLabel(pu.unit_id)}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              l.unitLabel
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="0.000001"
-                              step="0.000001"
-                              className="w-20"
-                              value={l.quantity}
-                              onChange={(e) => updateLine(l.key, { quantity: Number(e.target.value) || 0 })}
-                            />
-                          </TableCell>
-                          <TableCell>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="py-1 text-right">
                             <Input
                               type="number"
                               min="0"
                               step="0.01"
-                              className="w-24"
-                              value={l.unit_price}
-                              onChange={(e) => updateLine(l.key, { unit_price: Number(e.target.value) || 0 })}
+                              className="h-7 w-24 text-right"
+                              value={effectiveAmount(p)}
+                              onChange={(e) =>
+                                setPayments(
+                                  displayedPayments.map((x) =>
+                                    x.key === p.key
+                                      ? { ...x, amount: Number(e.target.value) || 0, auto: false }
+                                      : x
+                                  )
+                                )
+                              }
                             />
-                          </TableCell>
-                          <TableCell>{(l.quantity * l.unit_price).toFixed(2)}</TableCell>
-                          <TableCell>
-                            <Button variant="ghost" size="sm" onClick={() => removeLine(l.key)}>
+                          </td>
+                          <td className="py-1 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setPayments(displayedPayments.filter((x) => x.key !== p.key))}
+                            >
                               ✕
                             </Button>
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       ))}
-                    </TableBody>
-                  </Table>
-                )}
-
-                <div className="flex flex-wrap items-end justify-between gap-4 border-t pt-3">
-                  <div className="flex flex-col gap-2">
-                    <span className="text-xs text-muted-foreground">Client (optionnel)</span>
+                    </tbody>
+                  </table>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() =>
+                      setPayments([
+                        ...displayedPayments,
+                        {
+                          key: crypto.randomUUID(),
+                          method: "cash",
+                          amount: Math.max(0, totals.total - paidTotal),
+                          auto: false,
+                        },
+                      ])
+                    }
+                  >
+                    + Mode de règlement
+                  </Button>
+                  {displayedPayments.some((p) => p.method === "credit") && customerId === "none" && (
+                    <p className="mt-1 text-xs text-destructive">Choisissez un client pour le crédit.</p>
+                  )}
+                  <div className="mt-2">
+                    <span className="text-[11px] text-muted-foreground">Client (optionnel)</span>
                     <Select
                       items={[
                         { value: "none", label: "Client de passage" },
@@ -647,7 +838,7 @@ export default function PosPage() {
                       value={customerId}
                       onValueChange={(v) => v && setCustomerId(v)}
                     >
-                      <SelectTrigger className="w-48">
+                      <SelectTrigger className="h-7 w-full" size="sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -660,148 +851,126 @@ export default function PosPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex flex-col items-end gap-1 text-sm">
-                    <div className="flex w-48 justify-between text-muted-foreground">
-                      <span>Sous-total</span>
-                      <span>{totals.subtotal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex w-48 justify-between text-muted-foreground">
-                      <span>TVA</span>
-                      <span>{totals.tax.toFixed(2)}</span>
-                    </div>
-                    <div className="flex w-48 justify-between text-base font-semibold">
-                      <span>Total</span>
-                      <span>{totals.total.toFixed(2)}</span>
-                    </div>
+                </div>
+
+                <div className="flex flex-col justify-between rounded-md border bg-white p-3">
+                  <div>
+                    <span className="text-xs font-semibold text-slate-600">Espèces reçues</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="mt-1 h-8"
+                      value={cashReceived}
+                      onChange={(e) => setCashReceived(e.target.value)}
+                    />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between rounded-md bg-slate-800 px-4 py-3 text-white">
+                    <span className="text-lg font-semibold">A rendre</span>
+                    <span className="text-2xl font-bold">{changeDue.toFixed(2)}</span>
                   </div>
                 </div>
-
-                {error && <p className="text-sm text-destructive">{error}</p>}
-                {message && (
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-600">
-                    <span>{message}</span>
-                    {lastReceipt && (
-                      <>
-                        <Button variant="outline" size="sm" onClick={() => printWithTarget("80mm")}>
-                          Imprimer le ticket (80mm)
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => printWithTarget("a4")}>
-                          Imprimer la facture (A4)
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                )}
-                {ticket.length > 0 && <Badge variant="outline">{ticket.length} ligne(s)</Badge>}
-
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={clearTicket} disabled={busy}>
-                    Annuler (Échap)
-                  </Button>
-                  <Button variant="outline" onClick={() => void submitTicket("held")} disabled={busy}>
-                    Mettre en attente (F4)
-                  </Button>
-                  <Button onClick={openCheckout} disabled={busy}>
-                    Encaisser (F9)
-                  </Button>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Règlement</DialogTitle>
-            <DialogDescription>Total à régler : {totals.total.toFixed(2)}</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-3">
-            {payments.map((p) => (
-              <div key={p.key} className="flex items-end gap-2">
-                <div className="flex flex-1 flex-col gap-2">
-                  <span className="text-xs text-muted-foreground">Mode</span>
-                  <Select
-                    items={PAYMENT_METHODS}
-                    value={p.method}
-                    onValueChange={(v) =>
-                      v &&
-                      setPayments((cur) =>
-                        cur.map((x) => (x.key === p.key ? { ...x, method: v as PaymentMethod } : x))
-                      )
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PAYMENT_METHODS.map((m) => (
-                        <SelectItem key={m.value} value={m.value}>
-                          {m.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <span className="text-xs text-muted-foreground">Montant</span>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="w-28"
-                    value={p.amount}
-                    onChange={(e) =>
-                      setPayments((cur) =>
-                        cur.map((x) => (x.key === p.key ? { ...x, amount: Number(e.target.value) || 0 } : x))
-                      )
-                    }
-                  />
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setPayments((cur) => cur.filter((x) => x.key !== p.key))}
-                  disabled={payments.length === 1}
-                >
-                  ✕
-                </Button>
               </div>
-            ))}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setPayments((cur) => [
-                  ...cur,
-                  { key: crypto.randomUUID(), method: "cash", amount: Number((totals.total - paidTotal).toFixed(2)) },
-                ])
-              }
-            >
-              + Ajouter un mode de règlement
-            </Button>
-            <div className="flex justify-between border-t pt-2 text-sm">
-              <span>Réglé</span>
-              <span className={paymentBalanced ? "text-emerald-600" : "text-destructive"}>
-                {paidTotal.toFixed(2)} / {totals.total.toFixed(2)}
-              </span>
+
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              {message && (
+                <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-700">
+                  <span>{message}</span>
+                  {lastReceipt && (
+                    <>
+                      <Button variant="outline" size="sm" onClick={() => printWithTarget("80mm")}>
+                        Ticket 80mm
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => printWithTarget("a4")}>
+                        Facture A4
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Barre de boutons */}
+              <div className="grid grid-cols-4 gap-1.5">
+                <Button variant="outline" size="sm" onClick={clearTicket} disabled={busy}>
+                  Annuler
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => lastReceipt && printWithTarget("a4")}
+                  disabled={!lastReceipt}
+                >
+                  Facture
+                </Button>
+                <Button variant="outline" size="sm" onClick={confirmEntry}>
+                  Fin de saisie
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => lastReceipt && printWithTarget("80mm")}
+                  disabled={!lastReceipt}
+                >
+                  Ticket
+                </Button>
+
+                <Button variant="outline" size="sm" onClick={() => setShortcutsOpen((v) => !v)}>
+                  Raccourcis
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                  onClick={() => void submitTicket("completed")}
+                  disabled={busy || ticket.length === 0}
+                >
+                  Valider (F9)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void submitTicket("held")}
+                  disabled={busy || ticket.length === 0}
+                >
+                  En attente
+                </Button>
+                <Dialog open={heldOpen} onOpenChange={setHeldOpen}>
+                  <DialogTrigger render={<Button variant="outline" size="sm" />}>Rappel ticket</DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Tickets en attente</DialogTitle>
+                      <DialogDescription>Cliquez pour reprendre un ticket.</DialogDescription>
+                    </DialogHeader>
+                    {heldSales.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Aucun ticket en attente.</p>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {heldSales.map((s) => (
+                          <button
+                            key={s.id}
+                            onClick={() => void resumeHeldSale(s.id)}
+                            className="flex items-center justify-between rounded-md border p-2 text-left text-sm hover:bg-muted"
+                          >
+                            <span>{new Date(s.created_at).toLocaleString("fr-FR")}</span>
+                            <span className="font-medium">{s.total}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              {shortcutsOpen && (
+                <p className="rounded-md bg-slate-200 px-3 py-2 text-xs text-slate-700">
+                  F2 rechercher un article · F4 mettre en attente · F9 valider le paiement · Échap annuler le
+                  ticket · Entrée dans « Référence » ajoute la ligne · Clic sur une ligne pour la modifier ou la
+                  supprimer.
+                </p>
+              )}
             </div>
-            {payments.some((p) => p.method === "credit") && customerId === "none" && (
-              <p className="text-sm text-destructive">Choisissez un client pour un règlement à crédit.</p>
-            )}
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button
-              onClick={() => void submitTicket("completed", payments)}
-              disabled={
-                busy || !paymentBalanced || (payments.some((p) => p.method === "credit") && customerId === "none")
-              }
-            >
-              {busy ? "Enregistrement…" : "Valider le paiement"}
-            </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        )}
+      </div>
 
       {lastReceipt && (
         <div id="receipt-80mm" className="font-mono text-[11px] leading-tight text-black">
