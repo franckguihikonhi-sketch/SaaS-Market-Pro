@@ -247,6 +247,7 @@ function NewProductDialog({
   const [initialWarehouseId, setInitialWarehouseId] = useState("none");
   const [initialStock, setInitialStock] = useState("0");
   const [initialStockTouched, setInitialStockTouched] = useState(false);
+  const [initialStockUnitId, setInitialStockUnitId] = useState("base");
   const [error, setError] = useState<string | null>(null);
 
   function handleMinStockChange(value: string) {
@@ -254,8 +255,18 @@ function NewProductDialog({
     if (!initialStockTouched) setInitialStock(value);
   }
 
-  function handleInitialStockChange(value: string) {
-    setInitialStock(value);
+  const initialStockUnitCoeff =
+    initialStockUnitId === "base"
+      ? 1
+      : Number(altUnits.find((a) => a.unitId === initialStockUnitId)?.coefficient) || 1;
+  const displayedInitialStock =
+    initialStockUnitId === "base"
+      ? initialStock
+      : String(Number((Number(initialStock) / initialStockUnitCoeff).toFixed(6)));
+
+  function handleInitialStockDisplayChange(rawValue: string) {
+    const baseValue = (Number(rawValue) || 0) * initialStockUnitCoeff;
+    setInitialStock(String(baseValue));
     setInitialStockTouched(true);
   }
 
@@ -352,6 +363,7 @@ function NewProductDialog({
     setInitialWarehouseId("none");
     setInitialStock("0");
     setInitialStockTouched(false);
+    setInitialStockUnitId("base");
     setOpen(false);
     onCreated();
   }
@@ -555,21 +567,49 @@ function NewProductDialog({
                 </Select>
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="p-initial-stock">
-                  Quantité ({units.find((u) => u.id === baseUnitId)?.label ?? "unité de base"})
-                </Label>
-                <Input
-                  id="p-initial-stock"
-                  type="number"
-                  min="0"
-                  step="0.000001"
-                  className="w-40"
-                  value={initialStock}
-                  onChange={(e) => handleInitialStockChange(e.target.value)}
-                  disabled={initialWarehouseId === "none"}
-                />
+                <Label htmlFor="p-initial-stock">Quantité</Label>
+                <div className="flex gap-1">
+                  {altUnits.length > 0 && (
+                    <Select
+                      items={[
+                        { value: "base", label: units.find((u) => u.id === baseUnitId)?.label ?? "unité de base" },
+                        ...altUnits.map((a) => ({
+                          value: a.unitId,
+                          label: units.find((u) => u.id === a.unitId)?.label ?? "?",
+                        })),
+                      ]}
+                      value={initialStockUnitId}
+                      onValueChange={(v) => v && setInitialStockUnitId(v)}
+                    >
+                      <SelectTrigger className="w-28" size="sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="base">
+                          {units.find((u) => u.id === baseUnitId)?.label ?? "unité de base"}
+                        </SelectItem>
+                        {altUnits.map((a) => (
+                          <SelectItem key={a.unitId} value={a.unitId}>
+                            {units.find((u) => u.id === a.unitId)?.label ?? "?"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Input
+                    id="p-initial-stock"
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    className="w-32"
+                    value={displayedInitialStock}
+                    onChange={(e) => handleInitialStockDisplayChange(e.target.value)}
+                    disabled={initialWarehouseId === "none"}
+                  />
+                </div>
                 <span className="text-[11px] text-muted-foreground">
-                  Reprend le stock minimum par défaut, modifiable.
+                  = {initialStock || 0} {units.find((u) => u.id === baseUnitId)?.label ?? "unité de base"} · reprend
+                  le stock minimum par défaut, modifiable.
                 </span>
               </div>
             </div>
