@@ -471,7 +471,6 @@ export default function PosPage() {
     setCashReceived("");
     resetEntry();
     setCustomerId("none");
-    setTimeout(() => setMessage(null), 4000);
   }
 
   const loadHeldSales = useCallback(async () => {
