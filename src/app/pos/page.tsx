@@ -44,6 +44,7 @@ type ProductUnit = {
   coefficient_to_base: number;
   barcode: string | null;
 };
+type Stock = { product_id: string; warehouse_id: string; quantity: number };
 
 type TicketLine = {
   key: string;
@@ -112,6 +113,7 @@ export default function PosPage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [productUnits, setProductUnits] = useState<ProductUnit[]>([]);
+  const [stocks, setStocks] = useState<Stock[]>([]);
   const [storeId, setStoreId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
 
@@ -146,7 +148,7 @@ export default function PosPage() {
 
   const loadBase = useCallback(async () => {
     if (!profile) return;
-    const [{ data: org }, { data: s }, { data: w }, { data: u }, { data: p }, { data: pu }, { data: c }] =
+    const [{ data: org }, { data: s }, { data: w }, { data: u }, { data: p }, { data: pu }, { data: c }, { data: stk }] =
       await Promise.all([
         supabase.from("organizations").select("name").eq("id", profile.organization_id).single(),
         supabase.from("stores").select("id, name").eq("organization_id", profile.organization_id).order("name"),
@@ -160,6 +162,7 @@ export default function PosPage() {
           .order("label"),
         supabase.from("product_units").select("id, product_id, unit_id, coefficient_to_base, barcode"),
         supabase.from("customers").select("id, name").eq("organization_id", profile.organization_id).order("name"),
+        supabase.from("stocks").select("product_id, warehouse_id, quantity"),
       ]);
     setOrganizationName(org?.name ?? "");
     setStores((s as Store[]) ?? []);
@@ -168,9 +171,15 @@ export default function PosPage() {
     setProducts((p as Product[]) ?? []);
     setProductUnits((pu as ProductUnit[]) ?? []);
     setCustomers((c as Customer[]) ?? []);
+    setStocks((stk as Stock[]) ?? []);
     if (s && s.length > 0) setStoreId((cur) => cur || s[0].id);
     if (w && w.length > 0) setWarehouseId((cur) => cur || w[0].id);
   }, [profile]);
+
+  const reloadStocks = useCallback(async () => {
+    const { data: stk } = await supabase.from("stocks").select("product_id, warehouse_id, quantity");
+    setStocks((stk as Stock[]) ?? []);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
@@ -245,6 +254,21 @@ export default function PosPage() {
     return entryProduct.sale_price * coeff;
   }, [entryProduct, pendingUnitId, productUnits]);
   const displayedUnitPrice = priceOverride ?? (entryProduct ? suggestedPrice.toFixed(2) : "");
+
+  const entryStockBase = useMemo(() => {
+    if (!entryProduct || !warehouseId) return null;
+    return (
+      stocks.find((s) => s.product_id === entryProduct.id && s.warehouse_id === warehouseId)?.quantity ?? 0
+    );
+  }, [entryProduct, warehouseId, stocks]);
+  const entryStockBreakdown = useMemo(() => {
+    if (!entryProduct || entryStockBase === null) return [];
+    const parts = [{ label: unitCode(entryProduct.base_unit_id), qty: entryStockBase }];
+    for (const pu of productUnitsFor(entryProduct.id)) {
+      parts.push({ label: unitCode(pu.unit_id), qty: entryStockBase / pu.coefficient_to_base });
+    }
+    return parts;
+  }, [entryProduct, entryStockBase, productUnitsFor, unitCode]);
 
   function resetEntry() {
     setQuery("");
@@ -464,6 +488,7 @@ export default function PosPage() {
         total: totals.total,
         payments: finalPayments.map((p) => ({ ...p, amount: effectiveAmount(p) })),
       });
+      void reloadStocks();
     }
     setMessage(status === "held" ? "Ticket mis en attente." : "Vente enregistrée.");
     setTicket([]);
@@ -773,6 +798,24 @@ export default function PosPage() {
                   </Button>
                 </div>
               </div>
+
+              {entryProduct && (
+                <p className="text-xs text-muted-foreground">
+                  Stock disponible :{" "}
+                  {entryStockBreakdown.length > 0 ? (
+                    entryStockBreakdown.map((part, i) => (
+                      <span key={part.label}>
+                        {i > 0 && " · "}
+                        <span className={part.qty <= 0 ? "text-destructive" : ""}>
+                          {Number(part.qty.toFixed(6))} {part.label}
+                        </span>
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-destructive">choisissez un dépôt</span>
+                  )}
+                </p>
+              )}
 
               {/* Grille du ticket */}
               <div className="max-h-64 overflow-auto rounded-md border bg-white">
