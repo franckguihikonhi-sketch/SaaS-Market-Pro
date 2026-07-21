@@ -220,6 +220,9 @@ export default function PosPage() {
   const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
   const [keypadTarget, setKeypadTarget] = useState<"qty" | "discount" | "price">("qty");
+  // Vente validée mais toujours affichée : le ticket reste visible jusqu'à
+  // l'impression du ticket de caisse 80mm (ou l'annulation).
+  const [finalized, setFinalized] = useState(false);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -427,6 +430,7 @@ export default function PosPage() {
   }
 
   function confirmEntry() {
+    if (finalized) return;
     const qty = Number(pendingQty) || 0;
     const discount = Number(pendingDiscount) || 0;
     if (qty <= 0) {
@@ -488,6 +492,7 @@ export default function PosPage() {
   }
 
   function selectLine(l: TicketLine) {
+    if (finalized) return;
     setEditingKey(l.key);
     setQuery("");
     setPendingQty(String(l.quantity));
@@ -503,12 +508,31 @@ export default function PosPage() {
     resetEntry();
   }
 
-  function clearTicket() {
+  function resetForNextSale() {
     setTicket([]);
     setPayments([]);
     setCashReceived("");
-    resetEntry();
+    setCustomerId("none");
     setMessage(null);
+    setLastReceipt(null);
+    setFinalized(false);
+    resetEntry();
+  }
+
+  function clearTicket() {
+    resetForNextSale();
+  }
+
+  // Imprime le ticket 80mm puis, une fois l'impression terminée, réinitialise
+  // l'écran pour la vente suivante (les détails ne disparaissent qu'à ce
+  // moment-là).
+  function printReceiptAndReset() {
+    const onAfterPrint = () => {
+      window.removeEventListener("afterprint", onAfterPrint);
+      resetForNextSale();
+    };
+    window.addEventListener("afterprint", onAfterPrint);
+    printWithTarget("80mm");
   }
 
   const totals = useMemo(() => {
@@ -538,6 +562,7 @@ export default function PosPage() {
   const changeDue = Math.max(0, Number(cashReceived || 0) - totals.total);
 
   async function submitTicket(status: "held" | "completed") {
+    if (finalized) return;
     if (ticket.length === 0) {
       setError("Le ticket est vide.");
       return;
@@ -595,11 +620,17 @@ export default function PosPage() {
       void reloadStocks();
     }
     setMessage(status === "held" ? "Ticket mis en attente." : "Vente enregistrée.");
-    setTicket([]);
-    setPayments([]);
-    setCashReceived("");
-    resetEntry();
-    setCustomerId("none");
+    if (status === "completed") {
+      // On garde le ticket affiché : il ne disparaîtra qu'après impression
+      // du ticket de caisse 80mm (ou annulation).
+      setFinalized(true);
+    } else {
+      setTicket([]);
+      setPayments([]);
+      setCashReceived("");
+      resetEntry();
+      setCustomerId("none");
+    }
   }
 
   const loadHeldSales = useCallback(async () => {
@@ -672,7 +703,7 @@ export default function PosPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticket, storeId, warehouseId, displayedPayments, paymentBalanced]);
+  }, [ticket, storeId, warehouseId, displayedPayments, paymentBalanced, finalized]);
 
   if (loading || !session || !profile) {
     return (
@@ -903,7 +934,12 @@ export default function PosPage() {
                   <Button variant="outline" size="sm" onClick={deleteSelected} disabled={!editingKey}>
                     Supprimer
                   </Button>
-                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={confirmEntry}>
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                    onClick={confirmEntry}
+                    disabled={finalized}
+                  >
                     Enregistrer
                   </Button>
                 </div>
@@ -1123,13 +1159,25 @@ export default function PosPage() {
               {message && (
                 <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
                   <span>{message}</span>
+                  {finalized && (
+                    <span className="text-emerald-600/80">
+                      — imprimez le ticket 80mm pour passer à la vente suivante.
+                    </span>
+                  )}
                   {lastReceipt && (
                     <>
-                      <Button variant="outline" size="sm" onClick={() => printWithTarget("80mm")}>
-                        Ticket 80mm
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700"
+                        onClick={printReceiptAndReset}
+                      >
+                        Imprimer ticket 80mm
                       </Button>
                       <Button variant="outline" size="sm" onClick={() => printWithTarget("a4")}>
                         Facture A4
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={resetForNextSale}>
+                        Nouvelle vente
                       </Button>
                     </>
                   )}
@@ -1173,13 +1221,13 @@ export default function PosPage() {
                   >
                     Facture
                   </Button>
-                  <Button variant="outline" size="sm" onClick={confirmEntry}>
+                  <Button variant="outline" size="sm" onClick={confirmEntry} disabled={finalized}>
                     Fin de saisie
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => lastReceipt && printWithTarget("80mm")}
+                    onClick={() => lastReceipt && printReceiptAndReset()}
                     disabled={!lastReceipt}
                   >
                     Ticket
@@ -1191,7 +1239,7 @@ export default function PosPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => void submitTicket("held")}
-                    disabled={busy || ticket.length === 0}
+                    disabled={busy || ticket.length === 0 || finalized}
                   >
                     En attente
                   </Button>
@@ -1229,7 +1277,7 @@ export default function PosPage() {
                   size="lg"
                   className="h-auto bg-emerald-600 px-6 text-lg font-bold tracking-wide shadow-md hover:bg-emerald-700 sm:w-44"
                   onClick={() => void submitTicket("completed")}
-                  disabled={busy || ticket.length === 0}
+                  disabled={busy || ticket.length === 0 || finalized}
                 >
                   VALIDER (F9)
                 </Button>
