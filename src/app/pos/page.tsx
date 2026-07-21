@@ -979,23 +979,23 @@ export default function PosPage() {
 
               {/* Grille du ticket (style cahier) + pavé numérique */}
               <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row">
-                <div className="notebook-sheet min-h-0 flex-1 overflow-auto rounded-lg border border-amber-200/70 shadow-sm">
-                  <table className="w-full text-left text-sm">
-                    <thead className="sticky top-0 z-10 bg-[#efe6cf] text-[11px] font-semibold tracking-wide text-amber-900/70 uppercase">
-                      <tr className="border-b border-amber-300/60">
-                        <th className="py-2 pr-3 pl-12">Référence</th>
-                        <th className="px-3 py-2">Désignation</th>
-                        <th className="px-3 py-2">Unité</th>
-                        <th className="px-3 py-2 text-right">P.U. TTC</th>
-                        <th className="px-3 py-2 text-right">Quantité</th>
-                        <th className="px-3 py-2 text-right">Remise</th>
-                        <th className="px-3 py-2 text-right">Montant</th>
+                <div className="notebook-sheet min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 shadow-sm">
+                  <table className="w-full border-separate border-spacing-0 text-left text-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-100 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+                      <tr>
+                        <th className="h-8 border-b border-slate-300 py-0 pr-3 pl-12">Référence</th>
+                        <th className="h-8 border-b border-slate-300 px-3 py-0">Désignation</th>
+                        <th className="h-8 border-b border-slate-300 px-3 py-0">Unité</th>
+                        <th className="h-8 border-b border-slate-300 px-3 py-0 text-right">P.U. TTC</th>
+                        <th className="h-8 border-b border-slate-300 px-3 py-0 text-right">Quantité</th>
+                        <th className="h-8 border-b border-slate-300 px-3 py-0 text-right">Remise</th>
+                        <th className="h-8 border-b border-slate-300 px-3 py-0 text-right">Montant</th>
                       </tr>
                     </thead>
                     <tbody>
                       {ticket.length === 0 ? (
-                        <tr className="border-b border-sky-200/60">
-                          <td colSpan={7} className="py-8 pr-3 pl-12 text-center text-amber-900/40 italic">
+                        <tr>
+                          <td colSpan={7} className="h-8 py-0 pr-3 pl-12 text-center text-slate-400 italic">
                             Cahier de vente vide…
                           </td>
                         </tr>
@@ -1005,23 +1005,21 @@ export default function PosPage() {
                             key={l.key}
                             onClick={() => selectLine(l)}
                             className={cn(
-                              "cursor-pointer border-b border-sky-200/60 transition-colors",
-                              editingKey === l.key
-                                ? "bg-emerald-100/50"
-                                : "hover:bg-amber-100/40"
+                              "cursor-pointer transition-colors",
+                              editingKey === l.key ? "bg-emerald-100/60" : "hover:bg-slate-50"
                             )}
                           >
-                            <td className="py-2 pr-3 pl-12 font-mono text-xs text-slate-500">{l.code}</td>
-                            <td className="px-3 py-2 font-medium text-slate-800">{l.label}</td>
-                            <td className="px-3 py-2 text-slate-600">{l.unitCode}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                            <td className="h-8 py-0 pr-3 pl-12 font-mono text-xs text-slate-500">{l.code}</td>
+                            <td className="h-8 px-3 py-0 font-medium text-slate-800">{l.label}</td>
+                            <td className="h-8 px-3 py-0 text-slate-600">{l.unitCode}</td>
+                            <td className="h-8 px-3 py-0 text-right tabular-nums text-slate-600">
                               {l.unit_price.toFixed(2)}
                             </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-slate-600">{l.quantity}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                            <td className="h-8 px-3 py-0 text-right tabular-nums text-slate-600">{l.quantity}</td>
+                            <td className="h-8 px-3 py-0 text-right tabular-nums text-slate-600">
                               {l.discount ? `${l.discount}%` : "—"}
                             </td>
-                            <td className="px-3 py-2 text-right font-mono font-semibold tabular-nums text-slate-900">
+                            <td className="h-8 px-3 py-0 text-right font-mono font-semibold tabular-nums text-slate-900">
                               {lineAmount(l).toFixed(2)}
                             </td>
                           </tr>

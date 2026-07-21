@@ -129,18 +129,28 @@
   }
 }
 
-/* Ticket « cahier » : feuille crème avec marge rouge verticale, façon
-   cahier d'écolier. Les lignes horizontales bleues sont portées par la
-   bordure basse de chaque ligne du tableau pour rester alignées. */
+/* Ticket « cahier » : feuille BLANCHE réglée façon cahier d'écolier —
+   lignes horizontales bleues continues (tous les 32px, alignées sur la
+   hauteur des lignes du tableau) + marge verticale rouge. Le fond défile
+   avec le contenu (background-attachment: local). */
 .notebook-sheet {
-  background-color: #fdfbf1;
-  background-image: linear-gradient(
-    to right,
-    transparent 2.75rem,
-    rgba(214, 90, 90, 0.5) 2.75rem,
-    rgba(214, 90, 90, 0.5) calc(2.75rem + 1.5px),
-    transparent calc(2.75rem + 1.5px)
-  );
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(
+      to right,
+      transparent 2.75rem,
+      rgba(214, 90, 90, 0.55) 2.75rem,
+      rgba(214, 90, 90, 0.55) calc(2.75rem + 1.5px),
+      transparent calc(2.75rem + 1.5px)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 31px,
+      rgba(96, 165, 220, 0.35) 31px,
+      rgba(96, 165, 220, 0.35) 32px
+    );
+  background-attachment: local;
 }
 
 /* Impression : ticket thermique 80mm (#receipt-80mm) ou facture A4
