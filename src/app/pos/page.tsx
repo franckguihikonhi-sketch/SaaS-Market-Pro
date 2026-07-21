@@ -125,66 +125,57 @@ function NumericKeypad({
   onClear: () => void;
   onConfirm: () => void;
 }) {
+  const digitClass =
+    "rounded-lg border border-slate-200 bg-white py-3.5 font-mono text-xl font-semibold text-slate-800 shadow-sm transition-all hover:bg-slate-50 active:scale-95 active:bg-slate-100";
   return (
-    <div className="flex w-full flex-col gap-2 rounded-md border bg-white p-2 sm:w-56">
-      <div className="flex gap-1">
+    <div className="flex w-full flex-col gap-2 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm sm:w-60">
+      <div className="flex rounded-md bg-slate-100 p-0.5">
         {KEYPAD_TARGETS.map((t) => (
           <button
             key={t.value}
             type="button"
             onClick={() => onTargetChange(t.value)}
             className={cn(
-              "flex-1 rounded-md px-1 py-1 text-xs font-medium",
-              target === t.value ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              "flex-1 rounded px-1 py-1.5 text-xs font-semibold transition-colors",
+              target === t.value
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
             )}
           >
             {t.label}
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-3 gap-1.5">
+      <div className="grid grid-cols-3 gap-2">
         {["7", "8", "9", "4", "5", "6", "1", "2", "3"].map((d) => (
-          <button
-            key={d}
-            type="button"
-            onClick={() => onPress(d)}
-            className="rounded-md bg-slate-100 py-2.5 text-lg font-semibold text-slate-800 hover:bg-slate-200 active:bg-slate-300"
-          >
+          <button key={d} type="button" onClick={() => onPress(d)} className={digitClass}>
             {d}
           </button>
         ))}
-        <button
-          type="button"
-          onClick={() => onPress(".")}
-          className="rounded-md bg-slate-100 py-2.5 text-lg font-semibold text-slate-800 hover:bg-slate-200 active:bg-slate-300"
-        >
+        <button type="button" onClick={() => onPress(".")} className={digitClass}>
           ,
         </button>
-        <button
-          type="button"
-          onClick={() => onPress("0")}
-          className="rounded-md bg-slate-100 py-2.5 text-lg font-semibold text-slate-800 hover:bg-slate-200 active:bg-slate-300"
-        >
+        <button type="button" onClick={() => onPress("0")} className={digitClass}>
           0
         </button>
         <button
           type="button"
           onClick={onBackspace}
-          className="rounded-md bg-amber-400 py-2.5 text-lg font-semibold text-white hover:bg-amber-500 active:bg-amber-600"
+          className="rounded-lg bg-amber-500 py-3.5 text-xl font-semibold text-white shadow-sm transition-all hover:bg-amber-600 active:scale-95 active:bg-amber-700"
         >
           ⌫
         </button>
         <button
           type="button"
           onClick={onClear}
-          className="rounded-md bg-rose-500 py-2.5 text-sm font-semibold text-white hover:bg-rose-600 active:bg-rose-700"
+          className="rounded-lg bg-red-600 py-3.5 text-base font-bold text-white shadow-sm transition-all hover:bg-red-700 active:scale-95 active:bg-red-800"
         >
           C
         </button>
         <button
           type="button"
           onClick={onConfirm}
-          className="col-span-2 rounded-md bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 active:bg-emerald-800"
+          className="col-span-2 rounded-lg bg-emerald-600 py-3.5 text-base font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-95 active:bg-emerald-800"
         >
           OK
         </button>
@@ -705,21 +696,22 @@ export default function PosPage() {
         ) : (
           <div
             className={cn(
-              "overflow-hidden rounded-md border border-slate-400 bg-slate-100 shadow-lg",
+              "overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl ring-1 ring-black/5",
               maximized && "fixed inset-4 z-50 flex flex-col"
             )}
           >
             {/* Barre de titre */}
-            <div className="flex items-center justify-between bg-gradient-to-b from-slate-600 to-slate-700 px-3 py-1.5 text-white">
-              <span className="text-sm font-medium">
-                Ticket de caisse — {stores.find((s) => s.id === storeId)?.name ?? "Magasin"}
+            <div className="flex items-center justify-between bg-gradient-to-b from-slate-800 to-slate-900 px-4 py-2 text-white">
+              <span className="flex items-center gap-2 text-sm font-semibold tracking-wide">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                CAISSE — {stores.find((s) => s.id === storeId)?.name ?? "Magasin"}
               </span>
-              <div className="flex gap-1">
+              <div className="flex gap-1.5">
                 <button
                   type="button"
                   aria-label="Réduire"
                   onClick={() => setMinimized((v) => !v)}
-                  className="flex h-4 w-4 items-center justify-center rounded-sm bg-white/20 text-[10px] hover:bg-white/30"
+                  className="flex h-5 w-5 items-center justify-center rounded-sm bg-white/10 text-xs hover:bg-white/20"
                 >
                   _
                 </button>
@@ -727,7 +719,7 @@ export default function PosPage() {
                   type="button"
                   aria-label={maximized ? "Restaurer" : "Agrandir"}
                   onClick={() => setMaximized((v) => !v)}
-                  className="flex h-4 w-4 items-center justify-center rounded-sm bg-white/20 text-[10px] hover:bg-white/30"
+                  className="flex h-5 w-5 items-center justify-center rounded-sm bg-white/10 text-xs hover:bg-white/20"
                 >
                   {maximized ? "❐" : "□"}
                 </button>
@@ -736,18 +728,18 @@ export default function PosPage() {
 
             <div
               className={cn(
-                "flex flex-col gap-3 p-3",
+                "flex flex-col gap-3 bg-slate-50 p-3",
                 minimized && "hidden",
                 maximized && "flex-1 overflow-y-auto"
               )}
             >
               {/* En-tête : caissier / date / total */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-4 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                <div className="flex items-center gap-4 text-sm text-slate-600">
                   <span>
-                    Caissier <strong>{profile.full_name}</strong>
+                    Caissier <strong className="text-slate-900">{profile.full_name}</strong>
                   </span>
-                  <span>Date {new Date().toLocaleDateString("fr-FR")}</span>
+                  <span>{new Date().toLocaleDateString("fr-FR")}</span>
                   {stores.length > 1 && (
                     <Select
                       items={stores.map((s) => ({ value: s.id, label: s.name }))}
@@ -785,14 +777,18 @@ export default function PosPage() {
                     </Select>
                   )}
                 </div>
-                <div className="flex items-center gap-3 rounded-md bg-emerald-200 px-4 py-1.5">
-                  <span className="text-sm font-semibold text-emerald-900">Total TTC</span>
-                  <span className="text-2xl font-bold text-emerald-900">{totals.total.toFixed(2)}</span>
+                <div className="flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-2 shadow-inner">
+                  <span className="text-[11px] font-semibold tracking-wider text-emerald-500 uppercase">
+                    Total TTC
+                  </span>
+                  <span className="font-mono text-3xl font-bold tabular-nums text-emerald-400">
+                    {totals.total.toFixed(2)}
+                  </span>
                 </div>
               </div>
 
               {/* Ligne de saisie */}
-              <div className="flex flex-wrap items-end gap-2 rounded-md border bg-white p-2">
+              <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] text-muted-foreground">Référence</span>
                   <Input
@@ -932,43 +928,53 @@ export default function PosPage() {
 
               {/* Grille du ticket + pavé numérique */}
               <div className="flex flex-col gap-3 sm:flex-row">
-                <div className="notebook-paper max-h-64 flex-1 overflow-auto rounded-md border">
+                <div className="max-h-72 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm">
                   <table className="w-full text-left text-sm">
-                    <thead className="sticky top-0 bg-slate-200/90 text-xs uppercase text-slate-600 backdrop-blur-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-100 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
                       <tr>
-                        <th className="px-2 py-1.5">Référence</th>
-                        <th className="px-2 py-1.5">Désignation</th>
-                        <th className="px-2 py-1.5">Unité</th>
-                        <th className="px-2 py-1.5 text-right">P.U. TTC</th>
-                        <th className="px-2 py-1.5 text-right">Quantité</th>
-                        <th className="px-2 py-1.5 text-right">Remise</th>
-                        <th className="px-2 py-1.5 text-right">Montant</th>
+                        <th className="px-3 py-2">Référence</th>
+                        <th className="px-3 py-2">Désignation</th>
+                        <th className="px-3 py-2">Unité</th>
+                        <th className="px-3 py-2 text-right">P.U. TTC</th>
+                        <th className="px-3 py-2 text-right">Quantité</th>
+                        <th className="px-3 py-2 text-right">Remise</th>
+                        <th className="px-3 py-2 text-right">Montant</th>
                       </tr>
                     </thead>
                     <tbody>
                       {ticket.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-2 py-6 text-center text-muted-foreground">
+                          <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                             Ticket vide.
                           </td>
                         </tr>
                       ) : (
-                        ticket.map((l) => (
+                        ticket.map((l, i) => (
                           <tr
                             key={l.key}
                             onClick={() => selectLine(l)}
                             className={cn(
-                              "cursor-pointer hover:bg-black/5",
-                              editingKey === l.key && "bg-emerald-100/60"
+                              "cursor-pointer border-t border-slate-100 transition-colors",
+                              editingKey === l.key
+                                ? "bg-emerald-50"
+                                : i % 2 === 1
+                                  ? "bg-slate-50 hover:bg-slate-100"
+                                  : "hover:bg-slate-50"
                             )}
                           >
-                            <td className="px-2 py-1">{l.code}</td>
-                            <td className="px-2 py-1">{l.label}</td>
-                            <td className="px-2 py-1">{l.unitCode}</td>
-                            <td className="px-2 py-1 text-right">{l.unit_price.toFixed(2)}</td>
-                            <td className="px-2 py-1 text-right">{l.quantity}</td>
-                            <td className="px-2 py-1 text-right">{l.discount ? `${l.discount}%` : "—"}</td>
-                            <td className="px-2 py-1 text-right">{lineAmount(l).toFixed(2)}</td>
+                            <td className="px-3 py-1.5 font-mono text-xs text-slate-500">{l.code}</td>
+                            <td className="px-3 py-1.5 font-medium text-slate-800">{l.label}</td>
+                            <td className="px-3 py-1.5 text-slate-600">{l.unitCode}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">
+                              {l.unit_price.toFixed(2)}
+                            </td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">{l.quantity}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">
+                              {l.discount ? `${l.discount}%` : "—"}
+                            </td>
+                            <td className="px-3 py-1.5 text-right font-mono font-semibold tabular-nums text-slate-900">
+                              {lineAmount(l).toFixed(2)}
+                            </td>
                           </tr>
                         ))
                       )}
@@ -987,10 +993,17 @@ export default function PosPage() {
 
               {/* Réglements + à rendre */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-md border bg-white p-2">
+                <div className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-600">Mode de règlement</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
+                      Mode de règlement
+                    </span>
+                    <span
+                      className={cn(
+                        "font-mono text-xs font-semibold tabular-nums",
+                        paymentBalanced ? "text-emerald-600" : "text-amber-600"
+                      )}
+                    >
                       Réglé {paidTotal.toFixed(2)} / {totals.total.toFixed(2)}
                     </span>
                   </div>
@@ -1064,7 +1077,7 @@ export default function PosPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="mt-2"
+                    className="mt-2 w-full"
                     onClick={() =>
                       setPayments([
                         ...displayedPayments,
@@ -1107,28 +1120,38 @@ export default function PosPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-col justify-between rounded-md border bg-white p-3">
+                <div className="flex flex-col justify-between rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
                   <div>
-                    <span className="text-xs font-semibold text-slate-600">Espèces reçues</span>
+                    <span className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
+                      Espèces reçues
+                    </span>
                     <Input
                       type="number"
                       min="0"
                       step="0.01"
-                      className="mt-1 h-8"
+                      className="mt-1 h-8 font-mono tabular-nums"
                       value={cashReceived}
                       onChange={(e) => setCashReceived(e.target.value)}
                     />
                   </div>
-                  <div className="mt-3 flex items-center justify-between rounded-md bg-slate-800 px-4 py-3 text-white">
-                    <span className="text-lg font-semibold">A rendre</span>
-                    <span className="text-2xl font-bold">{changeDue.toFixed(2)}</span>
+                  <div className="mt-3 flex items-center justify-between rounded-lg bg-slate-900 px-4 py-3 shadow-inner">
+                    <span className="text-[11px] font-semibold tracking-wider text-emerald-500 uppercase">
+                      A rendre
+                    </span>
+                    <span className="font-mono text-2xl font-bold tabular-nums text-emerald-400">
+                      {changeDue.toFixed(2)}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {error && <p className="text-sm text-destructive">{error}</p>}
+              {error && (
+                <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+                  {error}
+                </p>
+              )}
               {message && (
-                <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-700">
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
                   <span>{message}</span>
                   {lastReceipt && (
                     <>
@@ -1144,74 +1167,79 @@ export default function PosPage() {
               )}
 
               {/* Barre de boutons */}
-              <div className="grid grid-cols-4 gap-1.5">
-                <Button variant="outline" size="sm" onClick={clearTicket} disabled={busy}>
-                  Annuler
-                </Button>
+              <div className="flex flex-col gap-1.5 sm:flex-row">
+                <div className="grid flex-1 grid-cols-3 gap-1.5 sm:grid-cols-6">
+                  <Button variant="outline" size="sm" onClick={clearTicket} disabled={busy}>
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => lastReceipt && printWithTarget("a4")}
+                    disabled={!lastReceipt}
+                  >
+                    Facture
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={confirmEntry}>
+                    Fin de saisie
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => lastReceipt && printWithTarget("80mm")}
+                    disabled={!lastReceipt}
+                  >
+                    Ticket
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setShortcutsOpen((v) => !v)}>
+                    Raccourcis
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void submitTicket("held")}
+                    disabled={busy || ticket.length === 0}
+                  >
+                    En attente
+                  </Button>
+                  <Dialog open={heldOpen} onOpenChange={setHeldOpen}>
+                    <DialogTrigger
+                      render={<Button variant="outline" size="sm" className="col-span-3 sm:col-span-6" />}
+                    >
+                      Rappel ticket
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Tickets en attente</DialogTitle>
+                        <DialogDescription>Cliquez pour reprendre un ticket.</DialogDescription>
+                      </DialogHeader>
+                      {heldSales.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Aucun ticket en attente.</p>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {heldSales.map((s) => (
+                            <button
+                              key={s.id}
+                              onClick={() => void resumeHeldSale(s.id)}
+                              className="flex items-center justify-between rounded-md border p-2 text-left text-sm hover:bg-muted"
+                            >
+                              <span>{new Date(s.created_at).toLocaleString("fr-FR")}</span>
+                              <span className="font-medium">{s.total}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </DialogContent>
+                  </Dialog>
+                </div>
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => lastReceipt && printWithTarget("a4")}
-                  disabled={!lastReceipt}
-                >
-                  Facture
-                </Button>
-                <Button variant="outline" size="sm" onClick={confirmEntry}>
-                  Fin de saisie
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => lastReceipt && printWithTarget("80mm")}
-                  disabled={!lastReceipt}
-                >
-                  Ticket
-                </Button>
-
-                <Button variant="outline" size="sm" onClick={() => setShortcutsOpen((v) => !v)}>
-                  Raccourcis
-                </Button>
-                <Button
-                  size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700"
+                  size="lg"
+                  className="h-auto bg-emerald-600 px-8 py-3 text-lg font-bold tracking-wide shadow-md hover:bg-emerald-700 sm:w-56"
                   onClick={() => void submitTicket("completed")}
                   disabled={busy || ticket.length === 0}
                 >
-                  Valider (F9)
+                  VALIDER (F9)
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void submitTicket("held")}
-                  disabled={busy || ticket.length === 0}
-                >
-                  En attente
-                </Button>
-                <Dialog open={heldOpen} onOpenChange={setHeldOpen}>
-                  <DialogTrigger render={<Button variant="outline" size="sm" />}>Rappel ticket</DialogTrigger>
-                  <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Tickets en attente</DialogTitle>
-                      <DialogDescription>Cliquez pour reprendre un ticket.</DialogDescription>
-                    </DialogHeader>
-                    {heldSales.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Aucun ticket en attente.</p>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        {heldSales.map((s) => (
-                          <button
-                            key={s.id}
-                            onClick={() => void resumeHeldSale(s.id)}
-                            className="flex items-center justify-between rounded-md border p-2 text-left text-sm hover:bg-muted"
-                          >
-                            <span>{new Date(s.created_at).toLocaleString("fr-FR")}</span>
-                            <span className="font-medium">{s.total}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </DialogContent>
-                </Dialog>
               </div>
 
               {shortcutsOpen && (

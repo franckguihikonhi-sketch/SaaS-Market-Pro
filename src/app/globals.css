@@ -129,20 +129,6 @@
   }
 }
 
-/* Effet « cahier » pour la grille du ticket de caisse : papier crème,
-   lignes horizontales bleutées, marge rouge verticale. */
-.notebook-paper {
-  background-color: #fffdf5;
-  background-image:
-    linear-gradient(to right, transparent 0, transparent 2.5rem, rgba(220, 38, 38, 0.35) 2.5rem, rgba(220, 38, 38, 0.35) calc(2.5rem + 1px), transparent calc(2.5rem + 1px)),
-    repeating-linear-gradient(to bottom, transparent 0, transparent 1.6rem, rgba(59, 130, 246, 0.25) 1.6rem, rgba(59, 130, 246, 0.25) calc(1.6rem + 1px));
-}
-@media (prefers-color-scheme: dark) {
-  .notebook-paper {
-    background-color: #2a2820;
-  }
-}
-
 /* Impression : ticket thermique 80mm (#receipt-80mm) ou facture A4
    (#invoice-a4). La taille de page (@page) est injectée dynamiquement en
    JS juste avant l'impression (voir printWithTarget dans /pos), car @page
