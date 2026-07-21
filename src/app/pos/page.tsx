@@ -116,6 +116,7 @@ export default function PosPage() {
   const [warehouseId, setWarehouseId] = useState("");
 
   const [query, setQuery] = useState("");
+  const [browseOpen, setBrowseOpen] = useState(false);
   const [pendingQty, setPendingQty] = useState("1");
   const [pendingDiscount, setPendingDiscount] = useState("0");
   const [pendingUnitId, setPendingUnitId] = useState("base");
@@ -212,6 +213,9 @@ export default function PosPage() {
       .slice(0, 8);
   }, [query, products, productUnits]);
 
+  const dropdownItems = query ? matches : browseOpen ? products : [];
+  const dropdownVisible = !editingKey && (query ? matches.length > 1 : browseOpen && products.length > 0);
+
   const exactMatch = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return null;
@@ -244,6 +248,7 @@ export default function PosPage() {
 
   function resetEntry() {
     setQuery("");
+    setBrowseOpen(false);
     setPendingQty("1");
     setPendingDiscount("0");
     setPendingUnitId("base");
@@ -341,9 +346,13 @@ export default function PosPage() {
   }
 
   function handleReferenceKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    confirmEntry();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      confirmEntry();
+    } else if (e.key === "Escape" && browseOpen) {
+      e.preventDefault();
+      setBrowseOpen(false);
+    }
   }
 
   function updateLine(key: string, patch: Partial<TicketLine>) {
@@ -517,6 +526,7 @@ export default function PosPage() {
       if (e.key === "F2") {
         e.preventDefault();
         searchRef.current?.focus();
+        setBrowseOpen((v) => !v);
       } else if (e.key === "F4") {
         e.preventDefault();
         void submitTicket("held");
@@ -663,9 +673,9 @@ export default function PosPage() {
                     value={editingKey ? selectedLine?.label ?? "" : matchedProduct?.label ?? ""}
                     placeholder={query && !matchedProduct ? "Aucun article correspondant" : ""}
                   />
-                  {!editingKey && query && matches.length > 1 && (
-                    <div className="absolute top-full z-10 mt-1 w-full rounded-md border bg-popover shadow-md">
-                      {matches.map((p) => (
+                  {dropdownVisible && (
+                    <div className="absolute top-full z-10 mt-1 max-h-72 w-full overflow-y-auto rounded-md border bg-popover shadow-md">
+                      {dropdownItems.map((p) => (
                         <button
                           key={p.id}
                           onClick={() =>
@@ -673,7 +683,9 @@ export default function PosPage() {
                           }
                           className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted"
                         >
-                          <span>{p.label}</span>
+                          <span>
+                            {p.label} <span className="text-xs text-muted-foreground">({p.code})</span>
+                          </span>
                           <span className="text-muted-foreground">{p.sale_price}</span>
                         </button>
                       ))}
