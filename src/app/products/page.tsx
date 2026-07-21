@@ -238,7 +238,30 @@ function NewProductDialog({
   const [salePrice, setSalePrice] = useState("0");
   const [taxRate, setTaxRate] = useState("0");
   const [minStock, setMinStock] = useState("0");
+  const [altUnits, setAltUnits] = useState<{ key: string; unitId: string; coefficient: string }[]>([]);
+  const [altUnitDraftId, setAltUnitDraftId] = useState("");
+  const [altUnitDraftCoeff, setAltUnitDraftCoeff] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const availableAltUnits = units.filter(
+    (u) => u.id !== baseUnitId && !altUnits.some((a) => a.unitId === u.id)
+  );
+
+  function addAltUnit() {
+    const coeff = Number(altUnitDraftCoeff);
+    if (!altUnitDraftId || !coeff || coeff <= 0) {
+      setError("Choisissez une unité alternative et un coefficient valide (> 0).");
+      return;
+    }
+    setAltUnits((cur) => [...cur, { key: crypto.randomUUID(), unitId: altUnitDraftId, coefficient: altUnitDraftCoeff }]);
+    setAltUnitDraftId("");
+    setAltUnitDraftCoeff("");
+    setError(null);
+  }
+
+  function removeAltUnit(key: string) {
+    setAltUnits((cur) => cur.filter((a) => a.key !== key));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -247,22 +270,40 @@ function NewProductDialog({
       setError("Choisissez une unité de base.");
       return;
     }
-    const { error } = await supabase.from("products").insert({
-      organization_id: organizationId,
-      label,
-      code,
-      barcode: barcode || null,
-      category_id: categoryId === "none" ? null : categoryId,
-      brand_id: brandId === "none" ? null : brandId,
-      base_unit_id: baseUnitId,
-      purchase_price: Number(purchasePrice) || 0,
-      sale_price: Number(salePrice) || 0,
-      tax_rate: Number(taxRate) || 0,
-      min_stock: Number(minStock) || 0,
-    });
+    const { data: created, error } = await supabase
+      .from("products")
+      .insert({
+        organization_id: organizationId,
+        label,
+        code,
+        barcode: barcode || null,
+        category_id: categoryId === "none" ? null : categoryId,
+        brand_id: brandId === "none" ? null : brandId,
+        base_unit_id: baseUnitId,
+        purchase_price: Number(purchasePrice) || 0,
+        sale_price: Number(salePrice) || 0,
+        tax_rate: Number(taxRate) || 0,
+        min_stock: Number(minStock) || 0,
+      })
+      .select("id")
+      .single();
     if (error) {
       setError(error.message);
       return;
+    }
+    if (altUnits.length > 0) {
+      const { error: altError } = await supabase.from("product_units").insert(
+        altUnits.map((a) => ({
+          product_id: created.id,
+          unit_id: a.unitId,
+          coefficient_to_base: Number(a.coefficient),
+        }))
+      );
+      if (altError) {
+        setError(`Article créé, mais échec de l'ajout des unités alternatives : ${altError.message}`);
+        onCreated();
+        return;
+      }
     }
     setLabel("");
     setCode("");
@@ -274,6 +315,9 @@ function NewProductDialog({
     setSalePrice("0");
     setTaxRate("0");
     setMinStock("0");
+    setAltUnits([]);
+    setAltUnitDraftId("");
+    setAltUnitDraftCoeff("");
     setOpen(false);
     onCreated();
   }
@@ -362,6 +406,65 @@ function NewProductDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {baseUnitId && (
+            <div className="flex flex-col gap-2 rounded-md border p-2">
+              <span className="text-sm font-medium">Unités de vente alternatives (optionnel)</span>
+              <span className="text-xs text-muted-foreground">
+                Ex. Carton = 36 × {units.find((u) => u.id === baseUnitId)?.label ?? "unité de base"}
+              </span>
+              {altUnits.length > 0 && (
+                <ul className="flex flex-col gap-1">
+                  {altUnits.map((a) => (
+                    <li key={a.key} className="flex items-center justify-between text-sm">
+                      <span>
+                        1 {units.find((u) => u.id === a.unitId)?.label ?? "?"} = {a.coefficient} ×{" "}
+                        {units.find((u) => u.id === baseUnitId)?.label ?? "unité de base"}
+                      </span>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => removeAltUnit(a.key)}>
+                        ✕
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {availableAltUnits.length > 0 && (
+                <div className="flex items-end gap-2">
+                  <div className="flex flex-1 flex-col gap-2">
+                    <Select
+                      items={availableAltUnits.map((u) => ({ value: u.id, label: u.label }))}
+                      value={altUnitDraftId}
+                      onValueChange={(v) => v && setAltUnitDraftId(v)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Unité alternative" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableAltUnits.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    className="w-28"
+                    placeholder="Coefficient"
+                    value={altUnitDraftCoeff}
+                    onChange={(e) => setAltUnitDraftCoeff(e.target.value)}
+                  />
+                  <Button type="button" variant="outline" onClick={addAltUnit}>
+                    Ajouter
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2">
             <div className="flex flex-1 flex-col gap-2">
               <Label htmlFor="p-purchase">Prix d&apos;achat</Label>

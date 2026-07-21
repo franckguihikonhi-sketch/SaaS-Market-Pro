@@ -26,7 +26,7 @@ import { useSession } from "@/lib/use-session";
 
 type Store = { id: string; name: string };
 type Warehouse = { id: string; name: string; store_id: string | null };
-type Unit = { id: string; label: string };
+type Unit = { id: string; code: string; label: string };
 type Product = {
   id: string;
   code: string;
@@ -52,6 +52,7 @@ type TicketLine = {
   code: string;
   label: string;
   unitLabel: string;
+  unitCode: string;
   quantity: number;
   unit_price: number;
   discount: number;
@@ -118,6 +119,7 @@ export default function PosPage() {
   const [pendingQty, setPendingQty] = useState("1");
   const [pendingDiscount, setPendingDiscount] = useState("0");
   const [pendingUnitId, setPendingUnitId] = useState("base");
+  const [priceOverride, setPriceOverride] = useState<string | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [ticket, setTicket] = useState<TicketLine[]>([]);
   const [message, setMessage] = useState<string | null>(null);
@@ -146,7 +148,7 @@ export default function PosPage() {
         supabase.from("organizations").select("name").eq("id", profile.organization_id).single(),
         supabase.from("stores").select("id, name").eq("organization_id", profile.organization_id).order("name"),
         supabase.from("warehouses").select("id, name, store_id").eq("organization_id", profile.organization_id).order("name"),
-        supabase.from("units").select("id, label").eq("organization_id", profile.organization_id),
+        supabase.from("units").select("id, code, label").eq("organization_id", profile.organization_id),
         supabase
           .from("products")
           .select("id, code, barcode, label, base_unit_id, sale_price, tax_rate, status")
@@ -178,6 +180,13 @@ export default function PosPage() {
 
   const unitLabel = useCallback(
     (id: string) => units.find((u) => u.id === id)?.label ?? "—",
+    [units]
+  );
+  const unitCode = useCallback(
+    (id: string) => {
+      const u = units.find((u) => u.id === id);
+      return u?.code || u?.label || "—";
+    },
     [units]
   );
 
@@ -221,29 +230,45 @@ export default function PosPage() {
       ? products.find((p) => p.id === selectedLine.product_id) ?? null
       : null
     : matchedProduct;
+  const suggestedPrice = useMemo(() => {
+    if (!entryProduct) return 0;
+    const coeff =
+      pendingUnitId === "base"
+        ? 1
+        : productUnits.find((pu) => pu.id === pendingUnitId)?.coefficient_to_base ?? 1;
+    return entryProduct.sale_price * coeff;
+  }, [entryProduct, pendingUnitId, productUnits]);
+  const displayedUnitPrice = priceOverride ?? (entryProduct ? suggestedPrice.toFixed(2) : "");
 
   function resetEntry() {
     setQuery("");
     setPendingQty("1");
     setPendingDiscount("0");
     setPendingUnitId("base");
+    setPriceOverride(null);
     setEditingKey(null);
     setError(null);
     searchRef.current?.focus();
   }
 
-  function addOrUpdateLine(product: Product, productUnitId: string | null, quantity: number, discount: number) {
-    const coeff = productUnitId
-      ? productUnits.find((pu) => pu.id === productUnitId)?.coefficient_to_base ?? 1
-      : 1;
+  function addOrUpdateLine(
+    product: Product,
+    productUnitId: string | null,
+    quantity: number,
+    discount: number,
+    unitPrice: number
+  ) {
     const unitLbl = productUnitId
       ? unitLabel(productUnits.find((pu) => pu.id === productUnitId)?.unit_id ?? "")
       : unitLabel(product.base_unit_id);
+    const unitCd = productUnitId
+      ? unitCode(productUnits.find((pu) => pu.id === productUnitId)?.unit_id ?? "")
+      : unitCode(product.base_unit_id);
     setTicket((cur) => {
       const existing = cur.find((l) => l.product_id === product.id && l.product_unit_id === productUnitId);
       if (existing) {
         return cur.map((l) =>
-          l === existing ? { ...l, quantity: l.quantity + quantity, discount } : l
+          l === existing ? { ...l, quantity: l.quantity + quantity, discount, unit_price: unitPrice } : l
         );
       }
       return [
@@ -255,8 +280,9 @@ export default function PosPage() {
           code: product.code,
           label: product.label,
           unitLabel: unitLbl,
+          unitCode: unitCd,
           quantity,
-          unit_price: product.sale_price * coeff,
+          unit_price: unitPrice,
           discount,
           tax_rate: product.tax_rate,
         },
@@ -280,25 +306,26 @@ export default function PosPage() {
         return;
       }
       const productUnitId = pendingUnitId === "base" ? null : pendingUnitId;
-      const coeff = productUnitId
-        ? productUnits.find((pu) => pu.id === productUnitId)?.coefficient_to_base ?? 1
-        : 1;
       const unitLbl = productUnitId
         ? unitLabel(productUnits.find((pu) => pu.id === productUnitId)?.unit_id ?? "")
         : unitLabel(product.base_unit_id);
+      const unitCd = productUnitId
+        ? unitCode(productUnits.find((pu) => pu.id === productUnitId)?.unit_id ?? "")
+        : unitCode(product.base_unit_id);
       updateLine(editingKey, {
         quantity: qty,
         discount,
         product_unit_id: productUnitId,
-        unit_price: product.sale_price * coeff,
+        unit_price: Number(priceOverride) || suggestedPrice,
         unitLabel: unitLbl,
+        unitCode: unitCd,
       });
       resetEntry();
       return;
     }
     if (matchedProduct) {
       const productUnitId = exactMatch?.productUnitId ?? (pendingUnitId === "base" ? null : pendingUnitId);
-      addOrUpdateLine(matchedProduct, productUnitId, qty, discount);
+      addOrUpdateLine(matchedProduct, productUnitId, qty, discount, Number(priceOverride) || suggestedPrice);
     } else {
       setError("Article introuvable.");
     }
@@ -325,6 +352,7 @@ export default function PosPage() {
     setPendingQty(String(l.quantity));
     setPendingDiscount(String(l.discount));
     setPendingUnitId(l.product_unit_id ?? "base");
+    setPriceOverride(String(l.unit_price));
     setError(null);
   }
 
@@ -465,6 +493,9 @@ export default function PosPage() {
           unitLabel: l.product_unit_id
             ? unitLabel(productUnits.find((pu) => pu.id === l.product_unit_id)?.unit_id ?? "")
             : unitLabel(products.find((p) => p.id === l.product_id)?.base_unit_id ?? ""),
+          unitCode: l.product_unit_id
+            ? unitCode(productUnits.find((pu) => pu.id === l.product_unit_id)?.unit_id ?? "")
+            : unitCode(products.find((p) => p.id === l.product_id)?.base_unit_id ?? ""),
           quantity: Number(l.quantity),
           unit_price: Number(l.unit_price),
           discount: 0,
@@ -612,7 +643,9 @@ export default function PosPage() {
                       {matches.map((p) => (
                         <button
                           key={p.id}
-                          onClick={() => addOrUpdateLine(p, null, Number(pendingQty) || 1, Number(pendingDiscount) || 0)}
+                          onClick={() =>
+                            addOrUpdateLine(p, null, Number(pendingQty) || 1, Number(pendingDiscount) || 0, p.sale_price)
+                          }
                           className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted"
                         >
                           <span>{p.label}</span>
@@ -622,34 +655,52 @@ export default function PosPage() {
                     </div>
                   )}
                 </div>
-                {entryProduct && productUnitsFor(entryProduct.id).length > 0 && (
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[11px] text-muted-foreground">Unité</span>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] text-muted-foreground">Unité</span>
+                  {entryProduct ? (
                     <Select
                       items={[
-                        { value: "base", label: unitLabel(entryProduct.base_unit_id) },
+                        { value: "base", label: unitCode(entryProduct.base_unit_id) },
                         ...productUnitsFor(entryProduct.id).map((pu) => ({
                           value: pu.id,
-                          label: unitLabel(pu.unit_id),
+                          label: unitCode(pu.unit_id),
                         })),
                       ]}
                       value={pendingUnitId}
-                      onValueChange={(v) => v && setPendingUnitId(v)}
+                      onValueChange={(v) => {
+                        if (!v) return;
+                        setPendingUnitId(v);
+                        setPriceOverride(null);
+                      }}
                     >
-                      <SelectTrigger className="h-8 w-28" size="sm">
+                      <SelectTrigger className="h-8 w-20" size="sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="base">{unitLabel(entryProduct.base_unit_id)}</SelectItem>
+                        <SelectItem value="base">{unitCode(entryProduct.base_unit_id)}</SelectItem>
                         {productUnitsFor(entryProduct.id).map((pu) => (
                           <SelectItem key={pu.id} value={pu.id}>
-                            {unitLabel(pu.unit_id)}
+                            {unitCode(pu.unit_id)}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                )}
+                  ) : (
+                    <Input className="h-8 w-20" readOnly value="—" />
+                  )}
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] text-muted-foreground">P.U.</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="h-8 w-24"
+                    value={displayedUnitPrice}
+                    onChange={(e) => setPriceOverride(e.target.value)}
+                    disabled={!entryProduct}
+                  />
+                </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] text-muted-foreground">Quantité</span>
                   <Input
@@ -719,7 +770,7 @@ export default function PosPage() {
                         >
                           <td className="px-2 py-1">{l.code}</td>
                           <td className="px-2 py-1">{l.label}</td>
-                          <td className="px-2 py-1">{l.unitLabel}</td>
+                          <td className="px-2 py-1">{l.unitCode}</td>
                           <td className="px-2 py-1 text-right">{l.unit_price.toFixed(2)}</td>
                           <td className="px-2 py-1 text-right">{l.quantity}</td>
                           <td className="px-2 py-1 text-right">{l.discount ? `${l.discount}%` : "—"}</td>
