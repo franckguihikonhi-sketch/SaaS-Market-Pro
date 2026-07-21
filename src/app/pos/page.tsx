@@ -983,7 +983,7 @@ export default function PosPage() {
                   <table className="w-full border-separate border-spacing-0 text-left text-sm">
                     <thead className="sticky top-0 z-10 bg-slate-100 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
                       <tr>
-                        <th className="h-8 border-b border-slate-300 py-0 pr-3 pl-12">Référence</th>
+                        <th className="h-8 border-b border-slate-300 px-3 py-0">Référence</th>
                         <th className="h-8 border-b border-slate-300 px-3 py-0">Désignation</th>
                         <th className="h-8 border-b border-slate-300 px-3 py-0">Unité</th>
                         <th className="h-8 border-b border-slate-300 px-3 py-0 text-right">P.U. TTC</th>
@@ -995,7 +995,7 @@ export default function PosPage() {
                     <tbody>
                       {ticket.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="h-8 py-0 pr-3 pl-12 text-center text-slate-400 italic">
+                          <td colSpan={7} className="h-8 px-3 py-0 text-center text-slate-400 italic">
                             Cahier de vente vide…
                           </td>
                         </tr>
@@ -1009,7 +1009,7 @@ export default function PosPage() {
                               editingKey === l.key ? "bg-emerald-100/60" : "hover:bg-slate-50"
                             )}
                           >
-                            <td className="h-8 py-0 pr-3 pl-12 font-mono text-xs text-slate-500">{l.code}</td>
+                            <td className="h-8 px-3 py-0 font-mono text-xs text-slate-500">{l.code}</td>
                             <td className="h-8 px-3 py-0 font-medium text-slate-800">{l.label}</td>
                             <td className="h-8 px-3 py-0 text-slate-600">{l.unitCode}</td>
                             <td className="h-8 px-3 py-0 text-right tabular-nums text-slate-600">
