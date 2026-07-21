@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,8 +50,8 @@ export default function SignupPage() {
 
   if (checkEmail) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/30 p-8">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-emerald-50/50 p-8">
+        <Card className="w-full max-w-sm shadow-lg">
           <CardHeader>
             <CardTitle>Vérifiez vos emails</CardTitle>
             <CardDescription>
@@ -69,8 +70,14 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-8">
-      <Card className="w-full max-w-sm">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-gradient-to-br from-slate-50 via-white to-emerald-50/50 p-8">
+      <Link href="/" className="flex items-center gap-2">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-600/20">
+          <ShoppingCart className="h-5 w-5" />
+        </span>
+        <span className="text-xl font-bold tracking-tight text-slate-900">Market-Pro</span>
+      </Link>
+      <Card className="w-full max-w-sm shadow-lg">
         <CardHeader>
           <CardTitle>Créer votre organisation</CardTitle>
           <CardDescription>
@@ -121,7 +128,11 @@ export default function SignupPage() {
             {error && <p className="text-sm text-destructive">{error}</p>}
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button
+              type="submit"
+              className="w-full bg-emerald-600 hover:bg-emerald-700"
+              disabled={loading}
+            >
               {loading ? "Création…" : "Créer mon organisation"}
             </Button>
             <p className="text-sm text-muted-foreground">
