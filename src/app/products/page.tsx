@@ -44,6 +44,7 @@ import { useSession } from "@/lib/use-session";
 type Category = { id: string; name: string };
 type Brand = { id: string; name: string };
 type Unit = { id: string; code: string; label: string };
+type Warehouse = { id: string; name: string };
 type Product = {
   id: string;
   code: string;
@@ -219,12 +220,14 @@ function NewProductDialog({
   categories,
   brands,
   units,
+  warehouses,
   onCreated,
 }: {
   organizationId: string;
   categories: Category[];
   brands: Brand[];
   units: Unit[];
+  warehouses: Warehouse[];
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -241,6 +244,8 @@ function NewProductDialog({
   const [altUnits, setAltUnits] = useState<{ key: string; unitId: string; coefficient: string }[]>([]);
   const [altUnitDraftId, setAltUnitDraftId] = useState("");
   const [altUnitDraftCoeff, setAltUnitDraftCoeff] = useState("");
+  const [initialWarehouseId, setInitialWarehouseId] = useState("none");
+  const [initialStock, setInitialStock] = useState("0");
   const [error, setError] = useState<string | null>(null);
 
   const availableAltUnits = units.filter(
@@ -305,6 +310,21 @@ function NewProductDialog({
         return;
       }
     }
+    const stockQty = Number(initialStock) || 0;
+    if (stockQty > 0 && initialWarehouseId !== "none") {
+      const { error: stockError } = await supabase.rpc("record_stock_movement", {
+        p_product_id: created.id,
+        p_warehouse_id: initialWarehouseId,
+        p_type: "inventory_count",
+        p_quantity: stockQty,
+        p_reason: "Stock initial",
+      });
+      if (stockError) {
+        setError(`Article créé, mais échec de l'enregistrement du stock initial : ${stockError.message}`);
+        onCreated();
+        return;
+      }
+    }
     setLabel("");
     setCode("");
     setBarcode("");
@@ -318,6 +338,8 @@ function NewProductDialog({
     setAltUnits([]);
     setAltUnitDraftId("");
     setAltUnitDraftCoeff("");
+    setInitialWarehouseId("none");
+    setInitialStock("0");
     setOpen(false);
     onCreated();
   }
@@ -485,6 +507,48 @@ function NewProductDialog({
               <Input id="p-min" type="number" min="0" step="0.01" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
             </div>
           </div>
+
+          {warehouses.length > 0 && (
+            <div className="flex gap-2 rounded-md border p-2">
+              <div className="flex flex-1 flex-col gap-2">
+                <Label>Stock initial — Dépôt</Label>
+                <Select
+                  items={[
+                    { value: "none", label: "Aucun (ne pas créer de stock)" },
+                    ...warehouses.map((w) => ({ value: w.id, label: w.name })),
+                  ]}
+                  value={initialWarehouseId}
+                  onValueChange={(v) => v && setInitialWarehouseId(v)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucun (ne pas créer de stock)</SelectItem>
+                    {warehouses.map((w) => (
+                      <SelectItem key={w.id} value={w.id}>
+                        {w.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="p-initial-stock">Quantité (en {units.find((u) => u.id === baseUnitId)?.label ?? "unité de base"})</Label>
+                <Input
+                  id="p-initial-stock"
+                  type="number"
+                  min="0"
+                  step="0.000001"
+                  className="w-40"
+                  value={initialStock}
+                  onChange={(e) => setInitialStock(e.target.value)}
+                  disabled={initialWarehouseId === "none"}
+                />
+              </div>
+            </div>
+          )}
+
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit">Créer l&apos;article</Button>
         </form>
@@ -500,6 +564,7 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
@@ -509,7 +574,7 @@ export default function ProductsPage() {
   const load = useCallback(async () => {
     if (!profile) return;
     setLoadingData(true);
-    const [{ data: p }, { data: c }, { data: b }, { data: u }] = await Promise.all([
+    const [{ data: p }, { data: c }, { data: b }, { data: u }, { data: w }] = await Promise.all([
       supabase
         .from("products")
         .select("id, code, barcode, label, category_id, brand_id, base_unit_id, purchase_price, sale_price, tax_rate, min_stock, status")
@@ -518,11 +583,13 @@ export default function ProductsPage() {
       supabase.from("categories").select("id, name").eq("organization_id", profile.organization_id).order("name"),
       supabase.from("brands").select("id, name").eq("organization_id", profile.organization_id).order("name"),
       supabase.from("units").select("id, code, label").eq("organization_id", profile.organization_id).order("code"),
+      supabase.from("warehouses").select("id, name").eq("organization_id", profile.organization_id).order("name"),
     ]);
     setProducts((p as Product[]) ?? []);
     setCategories((c as Category[]) ?? []);
     setBrands((b as Brand[]) ?? []);
     setUnits((u as Unit[]) ?? []);
+    setWarehouses((w as Warehouse[]) ?? []);
     setLoadingData(false);
   }, [profile]);
 
@@ -559,6 +626,7 @@ export default function ProductsPage() {
                   categories={categories}
                   brands={brands}
                   units={units}
+                  warehouses={warehouses}
                   onCreated={load}
                 />
               ) : (
