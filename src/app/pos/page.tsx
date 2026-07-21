@@ -104,10 +104,13 @@ function printWithTarget(target: "80mm" | "a4") {
   window.print();
 }
 
-const KEYPAD_TARGETS: { value: "qty" | "discount" | "price"; label: string }[] = [
-  { value: "qty", label: "Quantité" },
+type KeypadTarget = "qty" | "discount" | "price" | "cash";
+
+const KEYPAD_TARGETS: { value: KeypadTarget; label: string }[] = [
+  { value: "qty", label: "Qté" },
   { value: "discount", label: "Remise" },
   { value: "price", label: "P.U." },
+  { value: "cash", label: "Espèces" },
 ];
 
 function NumericKeypad({
@@ -118,8 +121,8 @@ function NumericKeypad({
   onClear,
   onConfirm,
 }: {
-  target: "qty" | "discount" | "price";
-  onTargetChange: (t: "qty" | "discount" | "price") => void;
+  target: KeypadTarget;
+  onTargetChange: (t: KeypadTarget) => void;
   onPress: (digit: string) => void;
   onBackspace: () => void;
   onClear: () => void;
@@ -219,7 +222,7 @@ export default function PosPage() {
   const [cashReceived, setCashReceived] = useState("");
   const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
-  const [keypadTarget, setKeypadTarget] = useState<"qty" | "discount" | "price">("qty");
+  const [keypadTarget, setKeypadTarget] = useState<KeypadTarget>("qty");
   // Vente validée mais toujours affichée : le ticket reste visible jusqu'à
   // l'impression du ticket de caisse 80mm (ou l'annulation).
   const [finalized, setFinalized] = useState(false);
@@ -357,11 +360,13 @@ export default function PosPage() {
   function keypadCurrentValue() {
     if (keypadTarget === "qty") return pendingQty;
     if (keypadTarget === "discount") return pendingDiscount;
+    if (keypadTarget === "cash") return cashReceived;
     return priceOverride ?? "";
   }
   function keypadSetValue(v: string) {
     if (keypadTarget === "qty") setPendingQty(v);
     else if (keypadTarget === "discount") setPendingDiscount(v);
+    else if (keypadTarget === "cash") setCashReceived(v);
     else setPriceOverride(v);
   }
   function keypadPress(digit: string) {
@@ -374,7 +379,13 @@ export default function PosPage() {
     keypadSetValue(next === "" ? "0" : next);
   }
   function keypadClear() {
-    keypadSetValue("0");
+    keypadSetValue(keypadTarget === "cash" ? "" : "0");
+  }
+  function keypadConfirm() {
+    // En mode « Espèces », le montant est déjà saisi en direct : OK ne doit
+    // pas tenter d'ajouter une ligne au ticket.
+    if (keypadTarget === "cash") return;
+    confirmEntry();
   }
 
   function resetEntry() {
@@ -898,9 +909,10 @@ export default function PosPage() {
                     type="number"
                     min="0"
                     step="0.01"
-                    className="h-8 w-24"
+                    className={cn("h-8 w-24", keypadTarget === "price" && "ring-2 ring-emerald-500")}
                     value={displayedUnitPrice}
                     onChange={(e) => setPriceOverride(e.target.value)}
+                    onFocus={() => setKeypadTarget("price")}
                     disabled={!entryProduct}
                   />
                 </div>
@@ -910,9 +922,10 @@ export default function PosPage() {
                     type="number"
                     min="0"
                     step="0.000001"
-                    className="h-8 w-20"
+                    className={cn("h-8 w-20", keypadTarget === "qty" && "ring-2 ring-emerald-500")}
                     value={pendingQty}
                     onChange={(e) => setPendingQty(e.target.value)}
+                    onFocus={() => setKeypadTarget("qty")}
                   />
                 </div>
                 <div className="flex flex-col gap-0.5">
@@ -922,9 +935,10 @@ export default function PosPage() {
                     min="0"
                     max="100"
                     step="0.01"
-                    className="h-8 w-20"
+                    className={cn("h-8 w-20", keypadTarget === "discount" && "ring-2 ring-emerald-500")}
                     value={pendingDiscount}
                     onChange={(e) => setPendingDiscount(e.target.value)}
+                    onFocus={() => setKeypadTarget("discount")}
                   />
                 </div>
                 <div className="flex gap-1">
@@ -1024,7 +1038,7 @@ export default function PosPage() {
                     onPress={keypadPress}
                     onBackspace={keypadBackspace}
                     onClear={keypadClear}
-                    onConfirm={confirmEntry}
+                    onConfirm={keypadConfirm}
                   />
 
                   {/* Règlement */}
@@ -1195,9 +1209,13 @@ export default function PosPage() {
                       type="number"
                       min="0"
                       step="0.01"
-                      className="h-7 w-24 font-mono tabular-nums"
+                      className={cn(
+                        "h-7 w-24 font-mono tabular-nums",
+                        keypadTarget === "cash" && "ring-2 ring-emerald-500"
+                      )}
                       value={cashReceived}
                       onChange={(e) => setCashReceived(e.target.value)}
+                      onFocus={() => setKeypadTarget("cash")}
                     />
                   </div>
                   <div className="flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 shadow-inner">
