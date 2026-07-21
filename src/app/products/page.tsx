@@ -246,7 +246,18 @@ function NewProductDialog({
   const [altUnitDraftCoeff, setAltUnitDraftCoeff] = useState("");
   const [initialWarehouseId, setInitialWarehouseId] = useState("none");
   const [initialStock, setInitialStock] = useState("0");
+  const [initialStockTouched, setInitialStockTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function handleMinStockChange(value: string) {
+    setMinStock(value);
+    if (!initialStockTouched) setInitialStock(value);
+  }
+
+  function handleInitialStockChange(value: string) {
+    setInitialStock(value);
+    setInitialStockTouched(true);
+  }
 
   const availableAltUnits = units.filter(
     (u) => u.id !== baseUnitId && !altUnits.some((a) => a.unitId === u.id)
@@ -340,6 +351,7 @@ function NewProductDialog({
     setAltUnitDraftCoeff("");
     setInitialWarehouseId("none");
     setInitialStock("0");
+    setInitialStockTouched(false);
     setOpen(false);
     onCreated();
   }
@@ -503,8 +515,17 @@ function NewProductDialog({
               <Input id="p-tax" type="number" min="0" step="0.01" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
             </div>
             <div className="flex flex-1 flex-col gap-2">
-              <Label htmlFor="p-min">Stock minimum</Label>
-              <Input id="p-min" type="number" min="0" step="0.01" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
+              <Label htmlFor="p-min">
+                Stock minimum ({units.find((u) => u.id === baseUnitId)?.label ?? "unité de base"})
+              </Label>
+              <Input
+                id="p-min"
+                type="number"
+                min="0"
+                step="0.01"
+                value={minStock}
+                onChange={(e) => handleMinStockChange(e.target.value)}
+              />
             </div>
           </div>
 
@@ -534,7 +555,9 @@ function NewProductDialog({
                 </Select>
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="p-initial-stock">Quantité (en {units.find((u) => u.id === baseUnitId)?.label ?? "unité de base"})</Label>
+                <Label htmlFor="p-initial-stock">
+                  Quantité ({units.find((u) => u.id === baseUnitId)?.label ?? "unité de base"})
+                </Label>
                 <Input
                   id="p-initial-stock"
                   type="number"
@@ -542,9 +565,12 @@ function NewProductDialog({
                   step="0.000001"
                   className="w-40"
                   value={initialStock}
-                  onChange={(e) => setInitialStock(e.target.value)}
+                  onChange={(e) => handleInitialStockChange(e.target.value)}
                   disabled={initialWarehouseId === "none"}
                 />
+                <span className="text-[11px] text-muted-foreground">
+                  Reprend le stock minimum par défaut, modifiable.
+                </span>
               </div>
             </div>
           )}
@@ -554,6 +580,241 @@ function NewProductDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const STATUSES = [
+  { value: "active", label: "Actif" },
+  { value: "inactive", label: "Inactif" },
+  { value: "archived", label: "Archivé" },
+];
+
+function EditProductDialog({
+  product,
+  categories,
+  brands,
+  units,
+  onUpdated,
+}: {
+  product: Product;
+  categories: Category[];
+  brands: Brand[];
+  units: Unit[];
+  onUpdated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState(product.label);
+  const [code, setCode] = useState(product.code);
+  const [barcode, setBarcode] = useState(product.barcode ?? "");
+  const [categoryId, setCategoryId] = useState(product.category_id ?? "none");
+  const [brandId, setBrandId] = useState(product.brand_id ?? "none");
+  const [purchasePrice, setPurchasePrice] = useState(String(product.purchase_price));
+  const [salePrice, setSalePrice] = useState(String(product.sale_price));
+  const [taxRate, setTaxRate] = useState(String(product.tax_rate));
+  const [minStock, setMinStock] = useState(String(product.min_stock));
+  const [status, setStatus] = useState(product.status);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reload the form each time the dialog opens
+    setLabel(product.label);
+    setCode(product.code);
+    setBarcode(product.barcode ?? "");
+    setCategoryId(product.category_id ?? "none");
+    setBrandId(product.brand_id ?? "none");
+    setPurchasePrice(String(product.purchase_price));
+    setSalePrice(String(product.sale_price));
+    setTaxRate(String(product.tax_rate));
+    setMinStock(String(product.min_stock));
+    setStatus(product.status);
+    setError(null);
+  }, [open, product]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSaving(true);
+    const { error } = await supabase
+      .from("products")
+      .update({
+        label,
+        code,
+        barcode: barcode || null,
+        category_id: categoryId === "none" ? null : categoryId,
+        brand_id: brandId === "none" ? null : brandId,
+        purchase_price: Number(purchasePrice) || 0,
+        sale_price: Number(salePrice) || 0,
+        tax_rate: Number(taxRate) || 0,
+        min_stock: Number(minStock) || 0,
+        status,
+      })
+      .eq("id", product.id);
+    setSaving(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setOpen(false);
+    onUpdated();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>Modifier</DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Modifier l&apos;article</DialogTitle>
+          <DialogDescription>
+            L&apos;unité de base ({units.find((u) => u.id === product.base_unit_id)?.label ?? "—"}) ne peut pas
+            être changée après création.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="e-label">Désignation</Label>
+            <Input id="e-label" required value={label} onChange={(e) => setLabel(e.target.value)} />
+          </div>
+          <div className="flex gap-2">
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="e-code">Code</Label>
+              <Input id="e-code" required value={code} onChange={(e) => setCode(e.target.value)} />
+            </div>
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="e-barcode">Code-barres</Label>
+              <Input id="e-barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex flex-1 flex-col gap-2">
+              <Label>Catégorie</Label>
+              <Select
+                items={[{ value: "none", label: "Aucune" }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
+                value={categoryId}
+                onValueChange={(v) => v && setCategoryId(v)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucune</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-1 flex-col gap-2">
+              <Label>Marque</Label>
+              <Select
+                items={[{ value: "none", label: "Aucune" }, ...brands.map((b) => ({ value: b.id, label: b.name }))]}
+                value={brandId}
+                onValueChange={(v) => v && setBrandId(v)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucune</SelectItem>
+                  {brands.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="e-purchase">Prix d&apos;achat</Label>
+              <Input id="e-purchase" type="number" min="0" step="0.01" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} />
+            </div>
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="e-sale">Prix de vente</Label>
+              <Input id="e-sale" type="number" min="0" step="0.01" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="e-tax">TVA (%)</Label>
+              <Input id="e-tax" type="number" min="0" step="0.01" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+            </div>
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="e-min">
+                Stock minimum ({units.find((u) => u.id === product.base_unit_id)?.label ?? "unité de base"})
+              </Label>
+              <Input id="e-min" type="number" min="0" step="0.01" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Statut</Label>
+            <Select items={STATUSES} value={status} onValueChange={(v) => v && setStatus(v)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUSES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button type="submit" disabled={saving}>
+            {saving ? "Enregistrement…" : "Enregistrer les modifications"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteProductButton({ product, onDeleted }: { product: Product; onDeleted: () => void }) {
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    if (!window.confirm(`Supprimer définitivement « ${product.label} » ?`)) return;
+    setChecking(true);
+    setError(null);
+    const [{ count: stockCount }, { count: movementCount }, { count: saleCount }] = await Promise.all([
+      supabase
+        .from("stocks")
+        .select("id", { count: "exact", head: true })
+        .eq("product_id", product.id)
+        .gt("quantity", 0),
+      supabase.from("stock_movements").select("id", { count: "exact", head: true }).eq("product_id", product.id),
+      supabase.from("sale_lines").select("id", { count: "exact", head: true }).eq("product_id", product.id),
+    ]);
+    if ((stockCount ?? 0) > 0 || (movementCount ?? 0) > 0 || (saleCount ?? 0) > 0) {
+      setChecking(false);
+      setError(
+        `Impossible de supprimer « ${product.label} » : il a du stock, un historique de mouvements, ou a déjà été vendu.`
+      );
+      return;
+    }
+    const { error: deleteError } = await supabase.from("products").delete().eq("id", product.id);
+    setChecking(false);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+    onDeleted();
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button variant="outline" size="sm" onClick={() => void handleDelete()} disabled={checking}>
+        {checking ? "Vérification…" : "Supprimer"}
+      </Button>
+      {error && <p className="max-w-48 text-right text-xs text-destructive">{error}</p>}
+    </div>
   );
 }
 
@@ -665,7 +926,19 @@ export default function ProductsPage() {
                         <Badge variant={p.status === "active" ? "secondary" : "outline"}>{p.status}</Badge>
                       </TableCell>
                       <TableCell>
-                        <ProductUnitsDialog product={p} units={units} canWrite={canWrite} />
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          <ProductUnitsDialog product={p} units={units} canWrite={canWrite} />
+                          {canWrite && (
+                            <EditProductDialog
+                              product={p}
+                              categories={categories}
+                              brands={brands}
+                              units={units}
+                              onUpdated={load}
+                            />
+                          )}
+                          {canWrite && <DeleteProductButton product={p} onDeleted={load} />}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
