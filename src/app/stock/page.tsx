@@ -41,7 +41,9 @@ import { supabase } from "@/lib/supabase";
 import { useSession } from "@/lib/use-session";
 
 type Warehouse = { id: string; code: string; name: string };
-type Product = { id: string; label: string; code: string };
+type Product = { id: string; label: string; code: string; base_unit_id: string };
+type Unit = { id: string; code: string; label: string };
+type ProductUnit = { id: string; product_id: string; unit_id: string; coefficient_to_base: number };
 type StockRow = { id: string; product_id: string; quantity: number };
 type Movement = {
   id: string;
@@ -53,6 +55,26 @@ type Movement = {
   reason: string;
   created_at: string;
 };
+
+function UnitBreakdown({ parts, signed }: { parts: { label: string; qty: number }[]; signed?: boolean }) {
+  return (
+    <>
+      {parts.map((part, i) => {
+        const value = Number(part.qty.toFixed(6));
+        const text = signed && value > 0 ? `+${value}` : String(value);
+        const colorClass = signed ? (value < 0 ? "text-destructive" : "text-emerald-600") : "";
+        return (
+          <span key={part.label}>
+            {i > 0 && " · "}
+            <span className={i === 0 ? colorClass : "text-muted-foreground"}>
+              {text} {part.label}
+            </span>
+          </span>
+        );
+      })}
+    </>
+  );
+}
 
 const MOVEMENT_TYPES = [
   { value: "purchase_receipt", label: "Réception achat (+)" },
@@ -178,6 +200,8 @@ export default function StockPage() {
   const { session, profile, loading } = useSession();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [productUnits, setProductUnits] = useState<ProductUnit[]>([]);
   const [warehouseId, setWarehouseId] = useState<string>("");
   const [stocks, setStocks] = useState<StockRow[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
@@ -189,12 +213,20 @@ export default function StockPage() {
 
   const loadBase = useCallback(async () => {
     if (!profile) return;
-    const [{ data: w }, { data: p }] = await Promise.all([
+    const [{ data: w }, { data: p }, { data: u }, { data: pu }] = await Promise.all([
       supabase.from("warehouses").select("id, code, name").eq("organization_id", profile.organization_id).order("code"),
-      supabase.from("products").select("id, label, code").eq("organization_id", profile.organization_id).order("label"),
+      supabase
+        .from("products")
+        .select("id, label, code, base_unit_id")
+        .eq("organization_id", profile.organization_id)
+        .order("label"),
+      supabase.from("units").select("id, code, label").eq("organization_id", profile.organization_id),
+      supabase.from("product_units").select("id, product_id, unit_id, coefficient_to_base"),
     ]);
     setWarehouses((w as Warehouse[]) ?? []);
     setProducts((p as Product[]) ?? []);
+    setUnits((u as Unit[]) ?? []);
+    setProductUnits((pu as ProductUnit[]) ?? []);
     if (w && w.length > 0) setWarehouseId((current) => current || w[0].id);
   }, [profile]);
 
@@ -240,6 +272,19 @@ export default function StockPage() {
 
   const canWrite = ["admin", "manager", "super_admin", "warehouse_keeper"].includes(profile.role);
   const productLabel = (id: string) => products.find((p) => p.id === id)?.label ?? "—";
+  const unitCode = (id: string) => {
+    const u = units.find((u) => u.id === id);
+    return u?.code || u?.label || "—";
+  };
+  function unitBreakdown(productId: string, baseQty: number) {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return [{ label: "—", qty: baseQty }];
+    const parts = [{ label: unitCode(product.base_unit_id), qty: baseQty }];
+    for (const pu of productUnits.filter((pu) => pu.product_id === productId)) {
+      parts.push({ label: unitCode(pu.unit_id), qty: baseQty / pu.coefficient_to_base });
+    }
+    return parts;
+  }
 
   return (
     <div className="min-h-screen bg-muted/30 p-8">
@@ -296,7 +341,9 @@ export default function StockPage() {
                   {stocks.map((s) => (
                     <TableRow key={s.id}>
                       <TableCell>{productLabel(s.product_id)}</TableCell>
-                      <TableCell>{s.quantity}</TableCell>
+                      <TableCell>
+                        <UnitBreakdown parts={unitBreakdown(s.product_id, s.quantity)} />
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -328,10 +375,12 @@ export default function StockPage() {
                       <TableCell>
                         <Badge variant="secondary">{m.type}</Badge>
                       </TableCell>
-                      <TableCell className={m.quantity < 0 ? "text-destructive" : "text-emerald-600"}>
-                        {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+                      <TableCell>
+                        <UnitBreakdown parts={unitBreakdown(m.product_id, m.quantity)} signed />
                       </TableCell>
-                      <TableCell>{m.new_qty}</TableCell>
+                      <TableCell>
+                        <UnitBreakdown parts={unitBreakdown(m.product_id, m.new_qty)} />
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {new Date(m.created_at).toLocaleString("fr-FR")}
                       </TableCell>
