@@ -104,6 +104,95 @@ function printWithTarget(target: "80mm" | "a4") {
   window.print();
 }
 
+const KEYPAD_TARGETS: { value: "qty" | "discount" | "price"; label: string }[] = [
+  { value: "qty", label: "Quantité" },
+  { value: "discount", label: "Remise" },
+  { value: "price", label: "P.U." },
+];
+
+function NumericKeypad({
+  target,
+  onTargetChange,
+  onPress,
+  onBackspace,
+  onClear,
+  onConfirm,
+}: {
+  target: "qty" | "discount" | "price";
+  onTargetChange: (t: "qty" | "discount" | "price") => void;
+  onPress: (digit: string) => void;
+  onBackspace: () => void;
+  onClear: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="flex w-full flex-col gap-2 rounded-md border bg-white p-2 sm:w-56">
+      <div className="flex gap-1">
+        {KEYPAD_TARGETS.map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            onClick={() => onTargetChange(t.value)}
+            className={cn(
+              "flex-1 rounded-md px-1 py-1 text-xs font-medium",
+              target === t.value ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {["7", "8", "9", "4", "5", "6", "1", "2", "3"].map((d) => (
+          <button
+            key={d}
+            type="button"
+            onClick={() => onPress(d)}
+            className="rounded-md bg-slate-100 py-2.5 text-lg font-semibold text-slate-800 hover:bg-slate-200 active:bg-slate-300"
+          >
+            {d}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => onPress(".")}
+          className="rounded-md bg-slate-100 py-2.5 text-lg font-semibold text-slate-800 hover:bg-slate-200 active:bg-slate-300"
+        >
+          ,
+        </button>
+        <button
+          type="button"
+          onClick={() => onPress("0")}
+          className="rounded-md bg-slate-100 py-2.5 text-lg font-semibold text-slate-800 hover:bg-slate-200 active:bg-slate-300"
+        >
+          0
+        </button>
+        <button
+          type="button"
+          onClick={onBackspace}
+          className="rounded-md bg-amber-400 py-2.5 text-lg font-semibold text-white hover:bg-amber-500 active:bg-amber-600"
+        >
+          ⌫
+        </button>
+        <button
+          type="button"
+          onClick={onClear}
+          className="rounded-md bg-rose-500 py-2.5 text-sm font-semibold text-white hover:bg-rose-600 active:bg-rose-700"
+        >
+          C
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="col-span-2 rounded-md bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 active:bg-emerald-800"
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function PosPage() {
   const router = useRouter();
   const { session, profile, loading } = useSession();
@@ -139,6 +228,7 @@ export default function PosPage() {
   const [cashReceived, setCashReceived] = useState("");
   const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
+  const [keypadTarget, setKeypadTarget] = useState<"qty" | "discount" | "price">("qty");
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -269,6 +359,29 @@ export default function PosPage() {
     }
     return parts;
   }, [entryProduct, entryStockBase, productUnitsFor, unitCode]);
+
+  function keypadCurrentValue() {
+    if (keypadTarget === "qty") return pendingQty;
+    if (keypadTarget === "discount") return pendingDiscount;
+    return priceOverride ?? "";
+  }
+  function keypadSetValue(v: string) {
+    if (keypadTarget === "qty") setPendingQty(v);
+    else if (keypadTarget === "discount") setPendingDiscount(v);
+    else setPriceOverride(v);
+  }
+  function keypadPress(digit: string) {
+    const cur = keypadCurrentValue();
+    if (digit === "." && cur.includes(".")) return;
+    keypadSetValue(cur === "0" && digit !== "." ? digit : cur + digit);
+  }
+  function keypadBackspace() {
+    const next = keypadCurrentValue().slice(0, -1);
+    keypadSetValue(next === "" ? "0" : next);
+  }
+  function keypadClear() {
+    keypadSetValue("0");
+  }
 
   function resetEntry() {
     setQuery("");
@@ -817,49 +930,59 @@ export default function PosPage() {
                 </p>
               )}
 
-              {/* Grille du ticket */}
-              <div className="max-h-64 overflow-auto rounded-md border bg-white">
-                <table className="w-full text-left text-sm">
-                  <thead className="sticky top-0 bg-slate-200 text-xs uppercase text-slate-600">
-                    <tr>
-                      <th className="px-2 py-1.5">Référence</th>
-                      <th className="px-2 py-1.5">Désignation</th>
-                      <th className="px-2 py-1.5">Unité</th>
-                      <th className="px-2 py-1.5 text-right">P.U. TTC</th>
-                      <th className="px-2 py-1.5 text-right">Quantité</th>
-                      <th className="px-2 py-1.5 text-right">Remise</th>
-                      <th className="px-2 py-1.5 text-right">Montant</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ticket.length === 0 ? (
+              {/* Grille du ticket + pavé numérique */}
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="notebook-paper max-h-64 flex-1 overflow-auto rounded-md border">
+                  <table className="w-full text-left text-sm">
+                    <thead className="sticky top-0 bg-slate-200/90 text-xs uppercase text-slate-600 backdrop-blur-sm">
                       <tr>
-                        <td colSpan={7} className="px-2 py-6 text-center text-muted-foreground">
-                          Ticket vide.
-                        </td>
+                        <th className="px-2 py-1.5">Référence</th>
+                        <th className="px-2 py-1.5">Désignation</th>
+                        <th className="px-2 py-1.5">Unité</th>
+                        <th className="px-2 py-1.5 text-right">P.U. TTC</th>
+                        <th className="px-2 py-1.5 text-right">Quantité</th>
+                        <th className="px-2 py-1.5 text-right">Remise</th>
+                        <th className="px-2 py-1.5 text-right">Montant</th>
                       </tr>
-                    ) : (
-                      ticket.map((l) => (
-                        <tr
-                          key={l.key}
-                          onClick={() => selectLine(l)}
-                          className={cn(
-                            "cursor-pointer border-t hover:bg-muted",
-                            editingKey === l.key && "bg-emerald-50"
-                          )}
-                        >
-                          <td className="px-2 py-1">{l.code}</td>
-                          <td className="px-2 py-1">{l.label}</td>
-                          <td className="px-2 py-1">{l.unitCode}</td>
-                          <td className="px-2 py-1 text-right">{l.unit_price.toFixed(2)}</td>
-                          <td className="px-2 py-1 text-right">{l.quantity}</td>
-                          <td className="px-2 py-1 text-right">{l.discount ? `${l.discount}%` : "—"}</td>
-                          <td className="px-2 py-1 text-right">{lineAmount(l).toFixed(2)}</td>
+                    </thead>
+                    <tbody>
+                      {ticket.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-2 py-6 text-center text-muted-foreground">
+                            Ticket vide.
+                          </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        ticket.map((l) => (
+                          <tr
+                            key={l.key}
+                            onClick={() => selectLine(l)}
+                            className={cn(
+                              "cursor-pointer hover:bg-black/5",
+                              editingKey === l.key && "bg-emerald-100/60"
+                            )}
+                          >
+                            <td className="px-2 py-1">{l.code}</td>
+                            <td className="px-2 py-1">{l.label}</td>
+                            <td className="px-2 py-1">{l.unitCode}</td>
+                            <td className="px-2 py-1 text-right">{l.unit_price.toFixed(2)}</td>
+                            <td className="px-2 py-1 text-right">{l.quantity}</td>
+                            <td className="px-2 py-1 text-right">{l.discount ? `${l.discount}%` : "—"}</td>
+                            <td className="px-2 py-1 text-right">{lineAmount(l).toFixed(2)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <NumericKeypad
+                  target={keypadTarget}
+                  onTargetChange={setKeypadTarget}
+                  onPress={keypadPress}
+                  onBackspace={keypadBackspace}
+                  onClear={keypadClear}
+                  onConfirm={confirmEntry}
+                />
               </div>
 
               {/* Réglements + à rendre */}
