@@ -393,16 +393,19 @@ export default function PosPage() {
     (p: PaymentLine) => (p.auto ? Number(totals.total.toFixed(2)) : p.amount),
     [totals.total]
   );
-  const paidTotal = useMemo(
-    () => payments.reduce((sum, p) => sum + effectiveAmount(p), 0),
-    [payments, effectiveAmount]
+  const displayedPayments: PaymentLine[] = useMemo(
+    () =>
+      payments.length > 0
+        ? payments
+        : ticket.length > 0
+          ? [{ key: "auto", method: "cash" as PaymentMethod, amount: Number(totals.total.toFixed(2)), auto: true }]
+          : [],
+    [payments, ticket.length, totals.total]
   );
-  const displayedPayments: PaymentLine[] =
-    payments.length > 0
-      ? payments
-      : ticket.length > 0
-        ? [{ key: "auto", method: "cash", amount: Number(totals.total.toFixed(2)), auto: true }]
-        : [];
+  const paidTotal = useMemo(
+    () => displayedPayments.reduce((sum, p) => sum + effectiveAmount(p), 0),
+    [displayedPayments, effectiveAmount]
+  );
   const paymentBalanced = ticket.length > 0 && Math.abs(paidTotal - totals.total) < 0.01;
   const changeDue = Math.max(0, Number(cashReceived || 0) - totals.total);
 
