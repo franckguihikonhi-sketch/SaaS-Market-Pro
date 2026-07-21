@@ -128,7 +128,7 @@ function NumericKeypad({
   const digitClass =
     "rounded-lg border border-slate-200 bg-white py-3.5 font-mono text-xl font-semibold text-slate-800 shadow-sm transition-all hover:bg-slate-50 active:scale-95 active:bg-slate-100";
   return (
-    <div className="flex w-full flex-col gap-2 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm sm:w-60">
+    <div className="flex w-full shrink-0 flex-col gap-2 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm sm:w-60">
       <div className="flex rounded-md bg-slate-100 p-0.5">
         {KEYPAD_TARGETS.map((t) => (
           <button
@@ -685,9 +685,11 @@ export default function PosPage() {
   const noSetup = stores.length === 0 || warehouses.length === 0;
 
   return (
-    <div className="min-h-screen bg-muted/30 p-4">
-      <div className="mx-auto flex max-w-5xl flex-col gap-4">
-        <AppNav />
+    <div className="h-screen overflow-hidden bg-muted/30 p-3">
+      <div className="mx-auto flex h-full max-w-5xl flex-col gap-2">
+        <div className="shrink-0">
+          <AppNav />
+        </div>
 
         {noSetup ? (
           <div className="rounded-md border bg-white p-6 text-sm text-muted-foreground">
@@ -696,12 +698,12 @@ export default function PosPage() {
         ) : (
           <div
             className={cn(
-              "overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl ring-1 ring-black/5",
-              maximized && "fixed inset-4 z-50 flex flex-col"
+              "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl ring-1 ring-black/5",
+              maximized && "fixed inset-4 z-50"
             )}
           >
             {/* Barre de titre */}
-            <div className="flex items-center justify-between bg-gradient-to-b from-slate-800 to-slate-900 px-4 py-2 text-white">
+            <div className="flex shrink-0 items-center justify-between bg-gradient-to-b from-slate-800 to-slate-900 px-4 py-2 text-white">
               <span className="flex items-center gap-2 text-sm font-semibold tracking-wide">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
                 CAISSE — {stores.find((s) => s.id === storeId)?.name ?? "Magasin"}
@@ -728,13 +730,12 @@ export default function PosPage() {
 
             <div
               className={cn(
-                "flex flex-col gap-3 bg-slate-50 p-3",
-                minimized && "hidden",
-                maximized && "flex-1 overflow-y-auto"
+                "flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-slate-50 p-3",
+                minimized && "hidden"
               )}
             >
               {/* En-tête : caissier / date / total */}
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
                 <div className="flex items-center gap-4 text-sm text-slate-600">
                   <span>
                     Caissier <strong className="text-slate-900">{profile.full_name}</strong>
@@ -788,7 +789,7 @@ export default function PosPage() {
               </div>
 
               {/* Ligne de saisie */}
-              <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
+              <div className="flex shrink-0 flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] text-muted-foreground">Référence</span>
                   <Input
@@ -909,7 +910,7 @@ export default function PosPage() {
               </div>
 
               {entryProduct && (
-                <p className="text-xs text-muted-foreground">
+                <p className="shrink-0 text-xs text-muted-foreground">
                   Stock disponible :{" "}
                   {entryStockBreakdown.length > 0 ? (
                     entryStockBreakdown.map((part, i) => (
@@ -927,8 +928,8 @@ export default function PosPage() {
               )}
 
               {/* Grille du ticket + pavé numérique */}
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <div className="max-h-72 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row">
+                <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm">
                   <table className="w-full text-left text-sm">
                     <thead className="sticky top-0 z-10 bg-slate-100 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
                       <tr>
@@ -992,7 +993,7 @@ export default function PosPage() {
               </div>
 
               {/* Réglements + à rendre */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
@@ -1007,6 +1008,7 @@ export default function PosPage() {
                       Réglé {paidTotal.toFixed(2)} / {totals.total.toFixed(2)}
                     </span>
                   </div>
+                  <div className="max-h-24 overflow-y-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="text-xs uppercase text-slate-500">
                       <tr>
@@ -1074,6 +1076,7 @@ export default function PosPage() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1146,12 +1149,12 @@ export default function PosPage() {
               </div>
 
               {error && (
-                <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+                <p className="shrink-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
                   {error}
                 </p>
               )}
               {message && (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+                <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
                   <span>{message}</span>
                   {lastReceipt && (
                     <>
@@ -1167,7 +1170,7 @@ export default function PosPage() {
               )}
 
               {/* Barre de boutons */}
-              <div className="flex flex-col gap-1.5 sm:flex-row">
+              <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
                 <div className="grid flex-1 grid-cols-3 gap-1.5 sm:grid-cols-6">
                   <Button variant="outline" size="sm" onClick={clearTicket} disabled={busy}>
                     Annuler
@@ -1243,7 +1246,7 @@ export default function PosPage() {
               </div>
 
               {shortcutsOpen && (
-                <p className="rounded-md bg-slate-200 px-3 py-2 text-xs text-slate-700">
+                <p className="shrink-0 rounded-md bg-slate-200 px-3 py-2 text-xs text-slate-700">
                   F2 rechercher un article · F4 mettre en attente · F9 valider le paiement · Échap annuler le
                   ticket · Entrée dans « Référence » ajoute la ligne · Clic sur une ligne pour la modifier ou la
                   supprimer.
