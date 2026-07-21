@@ -134,6 +134,8 @@ export default function PosPage() {
   const [customerId, setCustomerId] = useState<string>("none");
   const [payments, setPayments] = useState<PaymentLine[]>([]);
   const [cashReceived, setCashReceived] = useState("");
+  const [minimized, setMinimized] = useState(false);
+  const [maximized, setMaximized] = useState(false);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -551,23 +553,44 @@ export default function PosPage() {
             Créez d&apos;abord un magasin et un dépôt dans la page Magasins.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-md border border-slate-400 bg-slate-100 shadow-lg">
+          <div
+            className={cn(
+              "overflow-hidden rounded-md border border-slate-400 bg-slate-100 shadow-lg",
+              maximized && "fixed inset-4 z-50 flex flex-col"
+            )}
+          >
             {/* Barre de titre */}
             <div className="flex items-center justify-between bg-gradient-to-b from-slate-600 to-slate-700 px-3 py-1.5 text-white">
               <span className="text-sm font-medium">
                 Ticket de caisse — {stores.find((s) => s.id === storeId)?.name ?? "Magasin"}
               </span>
               <div className="flex gap-1">
-                <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-white/20 text-[10px]">
+                <button
+                  type="button"
+                  aria-label="Réduire"
+                  onClick={() => setMinimized((v) => !v)}
+                  className="flex h-4 w-4 items-center justify-center rounded-sm bg-white/20 text-[10px] hover:bg-white/30"
+                >
                   _
-                </span>
-                <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-white/20 text-[10px]">
-                  □
-                </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={maximized ? "Restaurer" : "Agrandir"}
+                  onClick={() => setMaximized((v) => !v)}
+                  className="flex h-4 w-4 items-center justify-center rounded-sm bg-white/20 text-[10px] hover:bg-white/30"
+                >
+                  {maximized ? "❐" : "□"}
+                </button>
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 p-3">
+            <div
+              className={cn(
+                "flex flex-col gap-3 p-3",
+                minimized && "hidden",
+                maximized && "flex-1 overflow-y-auto"
+              )}
+            >
               {/* En-tête : caissier / date / total */}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-4 text-sm">
