@@ -333,6 +333,8 @@ export default function PosPage() {
 
   function handleReferenceChange(value: string) {
     if (editingKey) setEditingKey(null);
+    setPendingUnitId("base");
+    setPriceOverride(null);
     setQuery(value);
   }
 
@@ -655,9 +657,9 @@ export default function PosPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[11px] text-muted-foreground">Unité</span>
-                  {entryProduct ? (
+                {entryProduct && productUnitsFor(entryProduct.id).length > 0 && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[11px] text-muted-foreground">Unité</span>
                     <Select
                       items={[
                         { value: "base", label: unitCode(entryProduct.base_unit_id) },
@@ -685,10 +687,8 @@ export default function PosPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                  ) : (
-                    <Input className="h-8 w-20" readOnly value="—" />
-                  )}
-                </div>
+                  </div>
+                )}
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] text-muted-foreground">P.U.</span>
                   <Input
