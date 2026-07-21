@@ -247,7 +247,6 @@ function NewProductDialog({
   const [initialWarehouseId, setInitialWarehouseId] = useState("none");
   const [initialStock, setInitialStock] = useState("0");
   const [initialStockTouched, setInitialStockTouched] = useState(false);
-  const [initialStockUnitId, setInitialStockUnitId] = useState("base");
   const [error, setError] = useState<string | null>(null);
 
   function handleMinStockChange(value: string) {
@@ -255,17 +254,17 @@ function NewProductDialog({
     if (!initialStockTouched) setInitialStock(value);
   }
 
-  const initialStockUnitCoeff =
-    initialStockUnitId === "base"
-      ? 1
-      : Number(altUnits.find((a) => a.unitId === initialStockUnitId)?.coefficient) || 1;
-  const displayedInitialStock =
-    initialStockUnitId === "base"
-      ? initialStock
-      : String(Number((Number(initialStock) / initialStockUnitCoeff).toFixed(6)));
+  function coefficientFor(unitId: string) {
+    return unitId === "base" ? 1 : Number(altUnits.find((a) => a.unitId === unitId)?.coefficient) || 1;
+  }
 
-  function handleInitialStockDisplayChange(rawValue: string) {
-    const baseValue = (Number(rawValue) || 0) * initialStockUnitCoeff;
+  function quantityFor(unitId: string) {
+    const coeff = coefficientFor(unitId);
+    return coeff === 1 ? initialStock : String(Number((Number(initialStock) / coeff).toFixed(6)));
+  }
+
+  function handleUnitQuantityChange(unitId: string, rawValue: string) {
+    const baseValue = (Number(rawValue) || 0) * coefficientFor(unitId);
     setInitialStock(String(baseValue));
     setInitialStockTouched(true);
   }
@@ -363,7 +362,6 @@ function NewProductDialog({
     setInitialWarehouseId("none");
     setInitialStock("0");
     setInitialStockTouched(false);
-    setInitialStockUnitId("base");
     setOpen(false);
     onCreated();
   }
@@ -566,50 +564,44 @@ function NewProductDialog({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="p-initial-stock">Quantité</Label>
-                <div className="flex gap-1">
-                  {altUnits.length > 0 && (
-                    <Select
-                      items={[
-                        { value: "base", label: units.find((u) => u.id === baseUnitId)?.label ?? "unité de base" },
-                        ...altUnits.map((a) => ({
-                          value: a.unitId,
-                          label: units.find((u) => u.id === a.unitId)?.label ?? "?",
-                        })),
-                      ]}
-                      value={initialStockUnitId}
-                      onValueChange={(v) => v && setInitialStockUnitId(v)}
-                    >
-                      <SelectTrigger className="w-28" size="sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="base">
-                          {units.find((u) => u.id === baseUnitId)?.label ?? "unité de base"}
-                        </SelectItem>
-                        {altUnits.map((a) => (
-                          <SelectItem key={a.unitId} value={a.unitId}>
-                            {units.find((u) => u.id === a.unitId)?.label ?? "?"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <Input
-                    id="p-initial-stock"
-                    type="number"
-                    min="0"
-                    step="0.000001"
-                    className="w-32"
-                    value={displayedInitialStock}
-                    onChange={(e) => handleInitialStockDisplayChange(e.target.value)}
-                    disabled={initialWarehouseId === "none"}
-                  />
+              <div className="flex flex-1 flex-col gap-2">
+                <Label>Quantité</Label>
+                <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[11px] text-muted-foreground">
+                      {units.find((u) => u.id === baseUnitId)?.label ?? "unité de base"}
+                    </span>
+                    <Input
+                      id="p-initial-stock"
+                      type="number"
+                      min="0"
+                      step="0.000001"
+                      className="w-28"
+                      value={quantityFor("base")}
+                      onChange={(e) => handleUnitQuantityChange("base", e.target.value)}
+                      disabled={initialWarehouseId === "none"}
+                    />
+                  </div>
+                  {altUnits.map((a) => (
+                    <div key={a.unitId} className="flex flex-col gap-1">
+                      <span className="text-[11px] text-muted-foreground">
+                        {units.find((u) => u.id === a.unitId)?.label ?? "?"}
+                      </span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.000001"
+                        className="w-28"
+                        value={quantityFor(a.unitId)}
+                        onChange={(e) => handleUnitQuantityChange(a.unitId, e.target.value)}
+                        disabled={initialWarehouseId === "none"}
+                      />
+                    </div>
+                  ))}
                 </div>
                 <span className="text-[11px] text-muted-foreground">
-                  = {initialStock || 0} {units.find((u) => u.id === baseUnitId)?.label ?? "unité de base"} · reprend
-                  le stock minimum par défaut, modifiable.
+                  Les champs se convertissent automatiquement entre eux · reprend le stock minimum par défaut,
+                  modifiable.
                 </span>
               </div>
             </div>
@@ -648,6 +640,9 @@ function EditProductDialog({
   const [barcode, setBarcode] = useState(product.barcode ?? "");
   const [categoryId, setCategoryId] = useState(product.category_id ?? "none");
   const [brandId, setBrandId] = useState(product.brand_id ?? "none");
+  const [baseUnitId, setBaseUnitId] = useState(product.base_unit_id);
+  const [baseUnitLocked, setBaseUnitLocked] = useState(true);
+  const [checkingEligibility, setCheckingEligibility] = useState(false);
   const [purchasePrice, setPurchasePrice] = useState(String(product.purchase_price));
   const [salePrice, setSalePrice] = useState(String(product.sale_price));
   const [taxRate, setTaxRate] = useState(String(product.tax_rate));
@@ -664,12 +659,22 @@ function EditProductDialog({
     setBarcode(product.barcode ?? "");
     setCategoryId(product.category_id ?? "none");
     setBrandId(product.brand_id ?? "none");
+    setBaseUnitId(product.base_unit_id);
     setPurchasePrice(String(product.purchase_price));
     setSalePrice(String(product.sale_price));
     setTaxRate(String(product.tax_rate));
     setMinStock(String(product.min_stock));
     setStatus(product.status);
     setError(null);
+    setCheckingEligibility(true);
+    Promise.all([
+      supabase.from("stocks").select("id", { count: "exact", head: true }).eq("product_id", product.id).gt("quantity", 0),
+      supabase.from("stock_movements").select("id", { count: "exact", head: true }).eq("product_id", product.id),
+      supabase.from("sale_lines").select("id", { count: "exact", head: true }).eq("product_id", product.id),
+    ]).then(([s, m, sl]) => {
+      setBaseUnitLocked((s.count ?? 0) > 0 || (m.count ?? 0) > 0 || (sl.count ?? 0) > 0);
+      setCheckingEligibility(false);
+    });
   }, [open, product]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -684,6 +689,7 @@ function EditProductDialog({
         barcode: barcode || null,
         category_id: categoryId === "none" ? null : categoryId,
         brand_id: brandId === "none" ? null : brandId,
+        base_unit_id: baseUnitId,
         purchase_price: Number(purchasePrice) || 0,
         sale_price: Number(salePrice) || 0,
         tax_rate: Number(taxRate) || 0,
@@ -707,14 +713,40 @@ function EditProductDialog({
         <DialogHeader>
           <DialogTitle>Modifier l&apos;article</DialogTitle>
           <DialogDescription>
-            L&apos;unité de base ({units.find((u) => u.id === product.base_unit_id)?.label ?? "—"}) ne peut pas
-            être changée après création.
+            L&apos;unité de base doit toujours être la plus petite unité (ex. Unité) — les unités plus grandes
+            (Carton, Sac…) se déclarent via « Unités de vente » avec un coefficient.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
             <Label htmlFor="e-label">Désignation</Label>
             <Input id="e-label" required value={label} onChange={(e) => setLabel(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Unité de base</Label>
+            <Select
+              items={units.map((u) => ({ value: u.id, label: u.label }))}
+              value={baseUnitId}
+              onValueChange={(v) => v && setBaseUnitId(v)}
+            >
+              <SelectTrigger className="w-full" disabled={baseUnitLocked || checkingEligibility}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {units.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-[11px] text-muted-foreground">
+              {checkingEligibility
+                ? "Vérification…"
+                : baseUnitLocked
+                  ? "Modifiable uniquement tant que l'article n'a ni stock, ni mouvement, ni vente enregistrée."
+                  : "Changer l'unité de base ne recalcule pas les coefficients des unités de vente déjà créées — vérifiez-les après modification."}
+            </span>
           </div>
           <div className="flex gap-2">
             <div className="flex flex-1 flex-col gap-2">
