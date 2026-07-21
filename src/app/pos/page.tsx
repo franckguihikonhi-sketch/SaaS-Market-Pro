@@ -126,9 +126,9 @@ function NumericKeypad({
   onConfirm: () => void;
 }) {
   const digitClass =
-    "rounded-lg border border-slate-200 bg-white py-3.5 font-mono text-xl font-semibold text-slate-800 shadow-sm transition-all hover:bg-slate-50 active:scale-95 active:bg-slate-100";
+    "flex items-center justify-center rounded-md border border-slate-200 bg-white py-1.5 font-mono text-lg font-semibold text-slate-800 shadow-sm transition-all hover:bg-slate-50 active:scale-95 active:bg-slate-100";
   return (
-    <div className="flex w-full shrink-0 flex-col gap-2 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm sm:w-60">
+    <div className="flex w-full shrink-0 flex-col gap-1.5 rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
       <div className="flex rounded-md bg-slate-100 p-0.5">
         {KEYPAD_TARGETS.map((t) => (
           <button
@@ -136,7 +136,7 @@ function NumericKeypad({
             type="button"
             onClick={() => onTargetChange(t.value)}
             className={cn(
-              "flex-1 rounded px-1 py-1.5 text-xs font-semibold transition-colors",
+              "flex-1 rounded px-1 py-1 text-xs font-semibold transition-colors",
               target === t.value
                 ? "bg-white text-slate-900 shadow-sm"
                 : "text-slate-500 hover:text-slate-700"
@@ -146,7 +146,7 @@ function NumericKeypad({
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-1.5">
         {["7", "8", "9", "4", "5", "6", "1", "2", "3"].map((d) => (
           <button key={d} type="button" onClick={() => onPress(d)} className={digitClass}>
             {d}
@@ -161,21 +161,21 @@ function NumericKeypad({
         <button
           type="button"
           onClick={onBackspace}
-          className="rounded-lg bg-amber-500 py-3.5 text-xl font-semibold text-white shadow-sm transition-all hover:bg-amber-600 active:scale-95 active:bg-amber-700"
+          className="flex items-center justify-center rounded-md bg-amber-500 py-1.5 text-lg font-semibold text-white shadow-sm transition-all hover:bg-amber-600 active:scale-95 active:bg-amber-700"
         >
           ⌫
         </button>
         <button
           type="button"
           onClick={onClear}
-          className="rounded-lg bg-red-600 py-3.5 text-base font-bold text-white shadow-sm transition-all hover:bg-red-700 active:scale-95 active:bg-red-800"
+          className="rounded-md bg-red-600 py-1.5 text-base font-bold text-white shadow-sm transition-all hover:bg-red-700 active:scale-95 active:bg-red-800"
         >
           C
         </button>
         <button
           type="button"
           onClick={onConfirm}
-          className="col-span-2 rounded-lg bg-emerald-600 py-3.5 text-base font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-95 active:bg-emerald-800"
+          className="col-span-2 rounded-md bg-emerald-600 py-1.5 text-base font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-95 active:bg-emerald-800"
         >
           OK
         </button>
@@ -735,7 +735,7 @@ export default function PosPage() {
               )}
             >
               {/* En-tête : caissier / date / total */}
-              <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
                 <div className="flex items-center gap-4 text-sm text-slate-600">
                   <span>
                     Caissier <strong className="text-slate-900">{profile.full_name}</strong>
@@ -778,19 +778,19 @@ export default function PosPage() {
                     </Select>
                   )}
                 </div>
-                <div className="flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-2 shadow-inner">
+                <div className="flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-1.5 shadow-inner">
                   <span className="text-[11px] font-semibold tracking-wider text-emerald-500 uppercase">
                     Total TTC
                   </span>
-                  <span className="font-mono text-3xl font-bold tabular-nums text-emerald-400">
+                  <span className="font-mono text-2xl font-bold tabular-nums text-emerald-400">
                     {totals.total.toFixed(2)}
                   </span>
                 </div>
               </div>
 
               {/* Ligne de saisie */}
-              <div className="flex shrink-0 flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
-                <div className="flex flex-col gap-1">
+              <div className="flex shrink-0 flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+                <div className="flex flex-col gap-0.5">
                   <span className="text-[11px] text-muted-foreground">Référence</span>
                   <Input
                     ref={searchRef}
@@ -802,7 +802,7 @@ export default function PosPage() {
                     readOnly={!!editingKey}
                   />
                 </div>
-                <div className="relative flex flex-1 flex-col gap-1">
+                <div className="relative flex flex-1 flex-col gap-0.5">
                   <span className="text-[11px] text-muted-foreground">Désignation</span>
                   <Input
                     className="h-8"
@@ -830,7 +830,7 @@ export default function PosPage() {
                   )}
                 </div>
                 {entryProduct && productUnitsFor(entryProduct.id).length > 0 && (
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-0.5">
                     <span className="text-[11px] text-muted-foreground">Unité</span>
                     <Select
                       items={[
@@ -861,7 +861,7 @@ export default function PosPage() {
                     </Select>
                   </div>
                 )}
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-0.5">
                   <span className="text-[11px] text-muted-foreground">P.U.</span>
                   <Input
                     type="number"
@@ -873,7 +873,7 @@ export default function PosPage() {
                     disabled={!entryProduct}
                   />
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-0.5">
                   <span className="text-[11px] text-muted-foreground">Quantité</span>
                   <Input
                     type="number"
@@ -884,7 +884,7 @@ export default function PosPage() {
                     onChange={(e) => setPendingQty(e.target.value)}
                   />
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-0.5">
                   <span className="text-[11px] text-muted-foreground">Remise %</span>
                   <Input
                     type="number"
@@ -927,13 +927,13 @@ export default function PosPage() {
                 </p>
               )}
 
-              {/* Grille du ticket + pavé numérique */}
+              {/* Grille du ticket (style cahier) + pavé numérique */}
               <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row">
-                <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="notebook-sheet min-h-0 flex-1 overflow-auto rounded-lg border border-amber-200/70 shadow-sm">
                   <table className="w-full text-left text-sm">
-                    <thead className="sticky top-0 z-10 bg-slate-100 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
-                      <tr>
-                        <th className="px-3 py-2">Référence</th>
+                    <thead className="sticky top-0 z-10 bg-[#efe6cf] text-[11px] font-semibold tracking-wide text-amber-900/70 uppercase">
+                      <tr className="border-b border-amber-300/60">
+                        <th className="py-2 pr-3 pl-12">Référence</th>
                         <th className="px-3 py-2">Désignation</th>
                         <th className="px-3 py-2">Unité</th>
                         <th className="px-3 py-2 text-right">P.U. TTC</th>
@@ -944,36 +944,34 @@ export default function PosPage() {
                     </thead>
                     <tbody>
                       {ticket.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
-                            Ticket vide.
+                        <tr className="border-b border-sky-200/60">
+                          <td colSpan={7} className="py-8 pr-3 pl-12 text-center text-amber-900/40 italic">
+                            Cahier de vente vide…
                           </td>
                         </tr>
                       ) : (
-                        ticket.map((l, i) => (
+                        ticket.map((l) => (
                           <tr
                             key={l.key}
                             onClick={() => selectLine(l)}
                             className={cn(
-                              "cursor-pointer border-t border-slate-100 transition-colors",
+                              "cursor-pointer border-b border-sky-200/60 transition-colors",
                               editingKey === l.key
-                                ? "bg-emerald-50"
-                                : i % 2 === 1
-                                  ? "bg-slate-50 hover:bg-slate-100"
-                                  : "hover:bg-slate-50"
+                                ? "bg-emerald-100/50"
+                                : "hover:bg-amber-100/40"
                             )}
                           >
-                            <td className="px-3 py-1.5 font-mono text-xs text-slate-500">{l.code}</td>
-                            <td className="px-3 py-1.5 font-medium text-slate-800">{l.label}</td>
-                            <td className="px-3 py-1.5 text-slate-600">{l.unitCode}</td>
-                            <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">
+                            <td className="py-2 pr-3 pl-12 font-mono text-xs text-slate-500">{l.code}</td>
+                            <td className="px-3 py-2 font-medium text-slate-800">{l.label}</td>
+                            <td className="px-3 py-2 text-slate-600">{l.unitCode}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                               {l.unit_price.toFixed(2)}
                             </td>
-                            <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">{l.quantity}</td>
-                            <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">
+                            <td className="px-3 py-2 text-right tabular-nums text-slate-600">{l.quantity}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                               {l.discount ? `${l.discount}%` : "—"}
                             </td>
-                            <td className="px-3 py-1.5 text-right font-mono font-semibold tabular-nums text-slate-900">
+                            <td className="px-3 py-2 text-right font-mono font-semibold tabular-nums text-slate-900">
                               {lineAmount(l).toFixed(2)}
                             </td>
                           </tr>
@@ -982,168 +980,137 @@ export default function PosPage() {
                     </tbody>
                   </table>
                 </div>
-                <NumericKeypad
-                  target={keypadTarget}
-                  onTargetChange={setKeypadTarget}
-                  onPress={keypadPress}
-                  onBackspace={keypadBackspace}
-                  onClear={keypadClear}
-                  onConfirm={confirmEntry}
-                />
-              </div>
+                {/* Colonne caisse : pavé numérique + règlement */}
+                <div className="flex w-full shrink-0 flex-col gap-2 overflow-y-auto sm:w-64">
+                  <NumericKeypad
+                    target={keypadTarget}
+                    onTargetChange={setKeypadTarget}
+                    onPress={keypadPress}
+                    onBackspace={keypadBackspace}
+                    onClear={keypadClear}
+                    onConfirm={confirmEntry}
+                  />
 
-              {/* Réglements + à rendre */}
-              <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
-                      Mode de règlement
-                    </span>
-                    <span
-                      className={cn(
-                        "font-mono text-xs font-semibold tabular-nums",
-                        paymentBalanced ? "text-emerald-600" : "text-amber-600"
-                      )}
+                  {/* Règlement */}
+                  <div className="shrink-0 rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
+                        Règlement
+                      </span>
+                      <span
+                        className={cn(
+                          "font-mono text-xs font-semibold tabular-nums",
+                          paymentBalanced ? "text-emerald-600" : "text-amber-600"
+                        )}
+                      >
+                        {paidTotal.toFixed(2)} / {totals.total.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="max-h-28 overflow-y-auto">
+                      <table className="w-full text-left text-sm">
+                        <tbody>
+                          {displayedPayments.map((p) => (
+                            <tr key={p.key}>
+                              <td className="py-0.5 pr-1">
+                                <Select
+                                  items={PAYMENT_METHODS}
+                                  value={p.method}
+                                  onValueChange={(v) => {
+                                    if (!v) return;
+                                    setPayments(
+                                      displayedPayments.map((x) =>
+                                        x.key === p.key ? { ...x, method: v as PaymentMethod } : x
+                                      )
+                                    );
+                                  }}
+                                >
+                                  <SelectTrigger className="h-7 w-full" size="sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {PAYMENT_METHODS.map((m) => (
+                                      <SelectItem key={m.value} value={m.value}>
+                                        {m.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className="py-0.5 text-right">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  className="h-7 w-16 text-right"
+                                  value={effectiveAmount(p)}
+                                  onChange={(e) =>
+                                    setPayments(
+                                      displayedPayments.map((x) =>
+                                        x.key === p.key
+                                          ? { ...x, amount: Number(e.target.value) || 0, auto: false }
+                                          : x
+                                      )
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td className="py-0.5 pl-0.5 text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => setPayments(displayedPayments.filter((x) => x.key !== p.key))}
+                                >
+                                  ✕
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-1.5 w-full"
+                      onClick={() =>
+                        setPayments([
+                          ...displayedPayments,
+                          {
+                            key: crypto.randomUUID(),
+                            method: "cash",
+                            amount: Math.max(0, totals.total - paidTotal),
+                            auto: false,
+                          },
+                        ])
+                      }
                     >
-                      Réglé {paidTotal.toFixed(2)} / {totals.total.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="max-h-24 overflow-y-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="text-xs uppercase text-slate-500">
-                      <tr>
-                        <th className="py-1">Mode</th>
-                        <th className="py-1 text-right">Montant</th>
-                        <th />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {displayedPayments.map((p) => (
-                        <tr key={p.key} className="border-t">
-                          <td className="py-1">
-                            <Select
-                              items={PAYMENT_METHODS}
-                              value={p.method}
-                              onValueChange={(v) => {
-                                if (!v) return;
-                                setPayments(
-                                  displayedPayments.map((x) =>
-                                    x.key === p.key ? { ...x, method: v as PaymentMethod } : x
-                                  )
-                                );
-                              }}
-                            >
-                              <SelectTrigger className="h-7 w-full" size="sm">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {PAYMENT_METHODS.map((m) => (
-                                  <SelectItem key={m.value} value={m.value}>
-                                    {m.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="py-1 text-right">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              className="h-7 w-24 text-right"
-                              value={effectiveAmount(p)}
-                              onChange={(e) =>
-                                setPayments(
-                                  displayedPayments.map((x) =>
-                                    x.key === p.key
-                                      ? { ...x, amount: Number(e.target.value) || 0, auto: false }
-                                      : x
-                                  )
-                                )
-                              }
-                            />
-                          </td>
-                          <td className="py-1 text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setPayments(displayedPayments.filter((x) => x.key !== p.key))}
-                            >
-                              ✕
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 w-full"
-                    onClick={() =>
-                      setPayments([
-                        ...displayedPayments,
-                        {
-                          key: crypto.randomUUID(),
-                          method: "cash",
-                          amount: Math.max(0, totals.total - paidTotal),
-                          auto: false,
-                        },
-                      ])
-                    }
-                  >
-                    + Mode de règlement
-                  </Button>
-                  {displayedPayments.some((p) => p.method === "credit") && customerId === "none" && (
-                    <p className="mt-1 text-xs text-destructive">Choisissez un client pour le crédit.</p>
-                  )}
-                  <div className="mt-2">
-                    <span className="text-[11px] text-muted-foreground">Client (optionnel)</span>
-                    <Select
-                      items={[
-                        { value: "none", label: "Client de passage" },
-                        ...customers.map((c) => ({ value: c.id, label: c.name })),
-                      ]}
-                      value={customerId}
-                      onValueChange={(v) => v && setCustomerId(v)}
-                    >
-                      <SelectTrigger className="h-7 w-full" size="sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Client de passage</SelectItem>
-                        {customers.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="flex flex-col justify-between rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
-                  <div>
-                    <span className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
-                      Espèces reçues
-                    </span>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="mt-1 h-8 font-mono tabular-nums"
-                      value={cashReceived}
-                      onChange={(e) => setCashReceived(e.target.value)}
-                    />
-                  </div>
-                  <div className="mt-3 flex items-center justify-between rounded-lg bg-slate-900 px-4 py-3 shadow-inner">
-                    <span className="text-[11px] font-semibold tracking-wider text-emerald-500 uppercase">
-                      A rendre
-                    </span>
-                    <span className="font-mono text-2xl font-bold tabular-nums text-emerald-400">
-                      {changeDue.toFixed(2)}
-                    </span>
+                      + Règlement
+                    </Button>
+                    {displayedPayments.some((p) => p.method === "credit") && customerId === "none" && (
+                      <p className="mt-1 text-xs text-destructive">Choisissez un client pour le crédit.</p>
+                    )}
+                    <div className="mt-1.5">
+                      <Select
+                        items={[
+                          { value: "none", label: "Client de passage" },
+                          ...customers.map((c) => ({ value: c.id, label: c.name })),
+                        ]}
+                        value={customerId}
+                        onValueChange={(v) => v && setCustomerId(v)}
+                      >
+                        <SelectTrigger className="h-7 w-full" size="sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Client de passage</SelectItem>
+                          {customers.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1169,8 +1136,31 @@ export default function PosPage() {
                 </div>
               )}
 
-              {/* Barre de boutons */}
-              <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
+              {/* Barre du bas : espèces + à rendre + actions + valider */}
+              <div className="flex shrink-0 flex-wrap items-stretch gap-2">
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 shadow-sm">
+                  <div className="flex flex-col justify-center">
+                    <span className="text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
+                      Espèces reçues
+                    </span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="h-7 w-24 font-mono tabular-nums"
+                      value={cashReceived}
+                      onChange={(e) => setCashReceived(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 shadow-inner">
+                    <span className="text-[10px] font-semibold tracking-wider text-emerald-500 uppercase">
+                      À rendre
+                    </span>
+                    <span className="font-mono text-xl font-bold tabular-nums text-emerald-400">
+                      {changeDue.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
                 <div className="grid flex-1 grid-cols-3 gap-1.5 sm:grid-cols-6">
                   <Button variant="outline" size="sm" onClick={clearTicket} disabled={busy}>
                     Annuler
@@ -1237,7 +1227,7 @@ export default function PosPage() {
                 </div>
                 <Button
                   size="lg"
-                  className="h-auto bg-emerald-600 px-8 py-3 text-lg font-bold tracking-wide shadow-md hover:bg-emerald-700 sm:w-56"
+                  className="h-auto bg-emerald-600 px-6 text-lg font-bold tracking-wide shadow-md hover:bg-emerald-700 sm:w-44"
                   onClick={() => void submitTicket("completed")}
                   disabled={busy || ticket.length === 0}
                 >
