@@ -727,8 +727,8 @@ export default function PosPage() {
   const noSetup = stores.length === 0 || warehouses.length === 0;
 
   return (
-    <div className="h-screen overflow-hidden bg-muted/30 p-3">
-      <div className="mx-auto flex h-full max-w-5xl flex-col gap-2">
+    <div className="min-h-screen bg-muted/30 p-2 sm:h-screen sm:overflow-hidden sm:p-3">
+      <div className="mx-auto flex max-w-5xl flex-col gap-2 sm:h-full">
         <div className="shrink-0">
           <AppNav />
         </div>
@@ -740,7 +740,7 @@ export default function PosPage() {
         ) : (
           <div
             className={cn(
-              "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl ring-1 ring-black/5",
+              "flex flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl ring-1 ring-black/5 sm:min-h-0 sm:flex-1",
               maximized && "fixed inset-4 z-50"
             )}
           >
@@ -772,7 +772,7 @@ export default function PosPage() {
 
             <div
               className={cn(
-                "flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-slate-50 p-3",
+                "flex flex-col gap-2 bg-slate-50 p-2 sm:min-h-0 sm:flex-1 sm:overflow-hidden sm:p-3",
                 minimized && "hidden"
               )}
             >
@@ -978,8 +978,8 @@ export default function PosPage() {
               )}
 
               {/* Grille du ticket (style cahier) + pavé numérique */}
-              <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row">
-                <div className="notebook-sheet min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 shadow-sm">
+              <div className="flex flex-col gap-3 sm:min-h-0 sm:flex-1 sm:flex-row">
+                <div className="notebook-sheet min-h-[15rem] overflow-auto rounded-lg border border-slate-200 shadow-sm sm:min-h-0 sm:flex-1">
                   <table className="w-full border-separate border-spacing-0 text-left text-sm">
                     <thead className="sticky top-0 z-10 bg-slate-100 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
                       <tr>
@@ -1029,7 +1029,7 @@ export default function PosPage() {
                   </table>
                 </div>
                 {/* Colonne caisse : pavé numérique + règlement */}
-                <div className="flex w-full shrink-0 flex-col gap-2 overflow-y-auto sm:w-64">
+                <div className="flex w-full shrink-0 flex-col gap-2 sm:w-64 sm:overflow-y-auto">
                   <NumericKeypad
                     target={keypadTarget}
                     onTargetChange={setKeypadTarget}

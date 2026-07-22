@@ -282,7 +282,7 @@ export default function CatalogPage() {
   const canWrite = ["admin", "manager", "super_admin"].includes(profile.role);
 
   return (
-    <div className="min-h-screen bg-muted/30 p-8">
+    <div className="min-h-screen bg-muted/30 p-4 sm:p-8">
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
         <AppNav />
         <Card>

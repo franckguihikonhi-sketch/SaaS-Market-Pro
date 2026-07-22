@@ -209,14 +209,17 @@ export default function DashboardPage() {
   const isAdmin = profile.role === "admin" || profile.role === "super_admin";
 
   return (
-    <div className="min-h-screen bg-muted/30 p-8">
+    <div className="min-h-screen bg-muted/30 p-4 sm:p-8">
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
         <AppNav />
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{organizationName || "Market-Pro"}</h1>
-            <p className="text-muted-foreground">
-              Connecté en tant que {profile.full_name} — <Badge variant="secondary">{profile.role}</Badge>
+            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+              {organizationName || "Market-Pro"}
+            </h1>
+            <p className="text-sm text-muted-foreground sm:text-base">
+              Connecté en tant que {profile.full_name} —{" "}
+              <Badge variant="secondary">{ROLE_LABELS[profile.role] ?? profile.role}</Badge>
             </p>
           </div>
           <Button variant="outline" onClick={handleSignOut}>

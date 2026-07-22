@@ -170,7 +170,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 p-8">
+    <div className="min-h-screen bg-muted/30 p-4 sm:p-8">
       <div className="mx-auto flex max-w-4xl flex-col gap-6">
         <AppNav />
 
@@ -178,25 +178,25 @@ export default function ReportsPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>CA aujourd&apos;hui</CardDescription>
-              <CardTitle className="text-2xl">{formatCFA(stats.caToday)}</CardTitle>
+              <CardTitle className="text-lg sm:text-2xl">{formatCFA(stats.caToday)}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Ventes aujourd&apos;hui</CardDescription>
-              <CardTitle className="text-2xl">{stats.salesToday}</CardTitle>
+              <CardTitle className="text-lg sm:text-2xl">{stats.salesToday}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>CA cette semaine</CardDescription>
-              <CardTitle className="text-2xl">{formatCFA(stats.caWeek)}</CardTitle>
+              <CardTitle className="text-lg sm:text-2xl">{formatCFA(stats.caWeek)}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>TVA collectée (semaine)</CardDescription>
-              <CardTitle className="text-2xl">{formatCFA(stats.tvaWeek)}</CardTitle>
+              <CardTitle className="text-lg sm:text-2xl">{formatCFA(stats.tvaWeek)}</CardTitle>
             </CardHeader>
           </Card>
         </div>
@@ -267,7 +267,7 @@ export default function ReportsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>Journal des ventes</CardTitle>
               <CardDescription>30 derniers jours</CardDescription>
