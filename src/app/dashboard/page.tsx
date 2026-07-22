@@ -42,8 +42,10 @@ export default function DashboardPage() {
   const [loadingColleagues, setLoadingColleagues] = useState(true);
 
   useEffect(() => {
-    if (!loading && !session) router.push("/login");
-  }, [loading, session, router]);
+    if (loading) return;
+    if (!session) router.push("/login");
+    else if (profile?.role === "cashier") router.push("/pos");
+  }, [loading, session, profile, router]);
 
   const loadOrgData = useCallback(async () => {
     if (!profile) return;

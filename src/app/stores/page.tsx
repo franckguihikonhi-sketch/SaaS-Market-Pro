@@ -51,8 +51,10 @@ export default function StoresPage() {
   const [whStoreId, setWhStoreId] = useState<string>("none");
 
   useEffect(() => {
-    if (!loading && !session) router.push("/login");
-  }, [loading, session, router]);
+    if (loading) return;
+    if (!session) router.push("/login");
+    else if (profile?.role === "cashier") router.push("/pos");
+  }, [loading, session, profile, router]);
 
   const load = useCallback(async () => {
     if (!profile) return;

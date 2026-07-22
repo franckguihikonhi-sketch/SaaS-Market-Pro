@@ -266,8 +266,10 @@ export default function CatalogPage() {
   const { session, profile, loading } = useSession();
 
   useEffect(() => {
-    if (!loading && !session) router.push("/login");
-  }, [loading, session, router]);
+    if (loading) return;
+    if (!session) router.push("/login");
+    else if (profile?.role === "cashier") router.push("/pos");
+  }, [loading, session, profile, router]);
 
   if (loading || !session || !profile) {
     return (
