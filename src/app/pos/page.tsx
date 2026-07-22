@@ -1004,10 +1004,7 @@ export default function PosPage() {
                           <tr
                             key={l.key}
                             onClick={() => selectLine(l)}
-                            className={cn(
-                              "cursor-pointer bg-blue-900 text-white transition-colors hover:bg-blue-800",
-                              editingKey === l.key && "ring-2 ring-inset ring-sky-300"
-                            )}
+                            className="cursor-pointer bg-blue-900 text-white"
                           >
                             <td className="h-8 px-3 py-0 font-mono text-xs text-blue-200">{l.code}</td>
                             <td className="h-8 px-3 py-0 font-medium text-white">{l.label}</td>
