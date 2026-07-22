@@ -6,6 +6,7 @@ import {
   BarChart3,
   BookOpen,
   Boxes,
+  Globe,
   LogOut,
   Package,
   ShoppingCart,
@@ -36,7 +37,12 @@ export function AppNav() {
   const { profile } = useSession();
 
   const isCashier = profile?.role === "cashier";
-  const links = isCashier ? LINKS.filter((l) => CASHIER_LINKS.has(l.href)) : LINKS;
+  const isPlatformOwner = profile?.role === "super_admin";
+  const links = isCashier
+    ? LINKS.filter((l) => CASHIER_LINKS.has(l.href))
+    : isPlatformOwner
+      ? [{ href: "/platform", label: "Plateforme", icon: Globe }, ...LINKS]
+      : LINKS;
 
   async function handleSignOut() {
     await supabase.auth.signOut();

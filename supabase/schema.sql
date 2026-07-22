@@ -56,6 +56,7 @@ create table profiles (
   store_id uuid,
   full_name text not null,
   email text,
+  last_seen timestamptz,
   role user_role not null default 'cashier',
   created_at timestamptz not null default now()
 );
@@ -442,6 +443,54 @@ end;
 $$;
 
 grant execute on function record_login() to authenticated;
+
+-- ─── Console plateforme (multi-entreprises), réservée au super_admin ───────
+create or replace function touch_last_seen()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  update profiles set last_seen = now() where id = auth.uid();
+end;
+$$;
+grant execute on function touch_last_seen() to authenticated;
+
+create or replace function platform_overview()
+returns table (
+  organization_id uuid,
+  organization_name text,
+  created_at timestamptz,
+  user_count bigint,
+  active_count bigint,
+  last_activity timestamptz
+)
+language sql security definer set search_path = public as $$
+  select o.id, o.name, o.created_at,
+    count(p.id) as user_count,
+    count(p.id) filter (where p.last_seen > now() - interval '5 minutes') as active_count,
+    max(p.last_seen) as last_activity
+  from organizations o
+  left join profiles p on p.organization_id = o.id
+  where my_role() = 'super_admin'
+  group by o.id, o.name, o.created_at
+  order by o.name;
+$$;
+grant execute on function platform_overview() to authenticated;
+
+create or replace function platform_agents()
+returns table (
+  organization_name text,
+  full_name text,
+  role user_role,
+  last_seen timestamptz
+)
+language sql security definer set search_path = public as $$
+  select o.name, p.full_name, p.role, p.last_seen
+  from profiles p
+  join organizations o on o.id = p.organization_id
+  where my_role() = 'super_admin'
+    and p.last_seen > now() - interval '5 minutes'
+  order by o.name, p.full_name;
+$$;
+grant execute on function platform_agents() to authenticated;
 
 -- Provisioning à l'inscription. Avec un invite_code valide → rejoint
 -- l'organisation invitante et son rôle ; sinon → nouvelle organisation (admin).

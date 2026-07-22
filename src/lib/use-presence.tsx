@@ -26,6 +26,12 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!profile) return;
+
+    // Heartbeat : met à jour last_seen (utilisé par la console plateforme
+    // pour savoir quelles entreprises/agents sont actifs).
+    void supabase.rpc("touch_last_seen");
+    const heartbeat = setInterval(() => void supabase.rpc("touch_last_seen"), 60000);
+
     const channel = supabase.channel(`presence-org-${profile.organization_id}`, {
       config: { presence: { key: profile.id } },
     });
@@ -53,6 +59,7 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
+      clearInterval(heartbeat);
       setOnline([]);
       void supabase.removeChannel(channel);
     };

@@ -43,7 +43,9 @@ export default function LoginPage() {
       .eq("id", data.user.id)
       .single();
     setLoading(false);
-    router.push(prof?.role === "cashier" ? "/pos" : "/dashboard");
+    router.push(
+      prof?.role === "cashier" ? "/pos" : prof?.role === "super_admin" ? "/platform" : "/dashboard"
+    );
   }
 
   return (
