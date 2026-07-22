@@ -96,6 +96,16 @@ create table password_reset_requests (
   resolved_at timestamptz
 );
 
+-- Historique des connexions (renseigné via record_login après chaque login).
+create table login_events (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references organizations on delete cascade,
+  profile_id uuid not null references profiles on delete cascade,
+  full_name text not null default '',
+  role user_role not null default 'cashier',
+  logged_in_at timestamptz not null default now()
+);
+
 -- ---------------------------------------------------------------------------
 -- MAGASINS & DÉPÔTS
 -- ---------------------------------------------------------------------------
@@ -259,6 +269,7 @@ alter table organizations enable row level security;
 alter table profiles enable row level security;
 alter table invitations enable row level security;
 alter table password_reset_requests enable row level security;
+alter table login_events enable row level security;
 alter table stores enable row level security;
 alter table warehouses enable row level security;
 alter table categories enable row level security;
@@ -338,6 +349,12 @@ create policy "org manage reset requests" on password_reset_requests for all
     and my_role() in ('admin', 'manager', 'super_admin')
   );
 
+create policy "org read login events" on login_events for select
+  using (
+    organization_id = my_organization_id()
+    and my_role() in ('admin', 'manager', 'super_admin')
+  );
+
 -- ─────────────────────────────────────────────────────────────────────────
 -- PHASE 2 : PROVISIONING AUTOMATIQUE À L'INSCRIPTION
 -- ─────────────────────────────────────────────────────────────────────────
@@ -411,6 +428,20 @@ end;
 $$;
 
 grant execute on function request_password_reset(text) to anon, authenticated;
+
+-- Enregistre la connexion de l'utilisateur courant (appelé après login).
+create or replace function record_login()
+returns void language plpgsql security definer set search_path = public as $$
+declare v_p profiles;
+begin
+  select * into v_p from profiles where id = auth.uid();
+  if v_p.id is null then return; end if;
+  insert into login_events (organization_id, profile_id, full_name, role)
+  values (v_p.organization_id, v_p.id, v_p.full_name, v_p.role);
+end;
+$$;
+
+grant execute on function record_login() to authenticated;
 
 -- Provisioning à l'inscription. Avec un invite_code valide → rejoint
 -- l'organisation invitante et son rôle ; sinon → nouvelle organisation (admin).

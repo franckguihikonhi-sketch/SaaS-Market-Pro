@@ -34,6 +34,8 @@ export default function LoginPage() {
       setError(error.message);
       return;
     }
+    // Enregistre la connexion pour l'historique.
+    void supabase.rpc("record_login");
     // Route selon le rôle : une caissière va directement à la caisse.
     const { data: prof } = await supabase
       .from("profiles")

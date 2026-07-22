@@ -79,6 +79,7 @@ export default function SignupPage() {
       return;
     }
     if (signUpData.session) {
+      void supabase.rpc("record_login");
       router.push(inviteInfo?.role === "cashier" ? "/pos" : "/dashboard");
     } else {
       setCheckEmail(true);

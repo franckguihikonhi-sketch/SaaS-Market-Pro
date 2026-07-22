@@ -47,6 +47,7 @@ const INVITE_ROLES = ["cashier", "manager", "warehouse_keeper", "accountant", "a
 
 type OrgProfile = Profile & { email?: string | null; organization?: { name: string } | null };
 type ResetRequest = { id: string; email: string; full_name: string; requested_at: string };
+type LoginEvent = { id: string; full_name: string; role: string; logged_in_at: string };
 type Invitation = {
   id: string;
   code: string;
@@ -62,6 +63,7 @@ export default function DashboardPage() {
   const onlineMembers = useOnlineMembers();
   const [organizationName, setOrganizationName] = useState<string>("");
   const [resetRequests, setResetRequests] = useState<ResetRequest[]>([]);
+  const [loginEvents, setLoginEvents] = useState<LoginEvent[]>([]);
   const [colleagues, setColleagues] = useState<OrgProfile[]>([]);
   const [loadingColleagues, setLoadingColleagues] = useState(true);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -81,7 +83,8 @@ export default function DashboardPage() {
   const loadOrgData = useCallback(async () => {
     if (!profile) return;
     setLoadingColleagues(true);
-    const [{ data: org }, { data: profiles }, { data: invites }, { data: resets }] = await Promise.all([
+    const [{ data: org }, { data: profiles }, { data: invites }, { data: resets }, { data: logins }] =
+      await Promise.all([
       supabase.from("organizations").select("name").eq("id", profile.organization_id).single(),
       supabase
         .from("profiles")
@@ -98,11 +101,17 @@ export default function DashboardPage() {
         .select("id, email, full_name, requested_at")
         .is("resolved_at", null)
         .order("requested_at", { ascending: false }),
+      supabase
+        .from("login_events")
+        .select("id, full_name, role, logged_in_at")
+        .order("logged_in_at", { ascending: false })
+        .limit(20),
     ]);
     setOrganizationName(org?.name ?? "");
     setColleagues((profiles as OrgProfile[]) ?? []);
     setInvitations((invites as Invitation[]) ?? []);
     setResetRequests((resets as ResetRequest[]) ?? []);
+    setLoginEvents((logins as LoginEvent[]) ?? []);
     setLoadingColleagues(false);
   }, [profile]);
 
@@ -243,7 +252,11 @@ export default function DashboardPage() {
                       <span className="h-2 w-2 rounded-full bg-emerald-500" />
                       <span className="font-medium text-slate-800">{m.full_name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {ROLE_LABELS[m.role] ?? m.role}
+                        {ROLE_LABELS[m.role] ?? m.role} · depuis{" "}
+                        {new Date(m.online_at).toLocaleTimeString("fr-FR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </span>
                     </span>
                   ))}
@@ -485,6 +498,41 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Historique des connexions</CardTitle>
+              <CardDescription>20 dernières connexions à votre organisation</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loginEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aucune connexion enregistrée.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nom</TableHead>
+                      <TableHead>Rôle</TableHead>
+                      <TableHead>Date et heure</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loginEvents.map((ev) => (
+                      <TableRow key={ev.id}>
+                        <TableCell>{ev.full_name || "—"}</TableCell>
+                        <TableCell>{ROLE_LABELS[ev.role] ?? ev.role}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(ev.logged_in_at).toLocaleString("fr-FR")}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
