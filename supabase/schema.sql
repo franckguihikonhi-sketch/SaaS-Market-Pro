@@ -69,6 +69,20 @@ language sql stable security definer set search_path = public as $$
   select role from profiles where id = auth.uid();
 $$;
 
+-- Invitations : un admin invite un collègue à rejoindre SON organisation
+-- avec un rôle donné, via un code d'invitation (voir handle_new_user).
+create table invitations (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references organizations on delete cascade,
+  code text not null unique,
+  role user_role not null default 'cashier',
+  full_name text not null default '',
+  created_by uuid references profiles on delete set null,
+  used_by uuid references profiles on delete set null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 -- ---------------------------------------------------------------------------
 -- MAGASINS & DÉPÔTS
 -- ---------------------------------------------------------------------------
@@ -230,6 +244,7 @@ language sql stable as $$ select true; $$;
 
 alter table organizations enable row level security;
 alter table profiles enable row level security;
+alter table invitations enable row level security;
 alter table stores enable row level security;
 alter table warehouses enable row level security;
 alter table categories enable row level security;
@@ -288,6 +303,17 @@ create policy "admin update profiles" on profiles for update using (
   and id <> auth.uid()
 );
 
+-- Les admins / managers gèrent les invitations de leur organisation.
+create policy "org manage invitations" on invitations for all
+  using (
+    organization_id = my_organization_id()
+    and my_role() in ('admin', 'manager', 'super_admin')
+  )
+  with check (
+    organization_id = my_organization_id()
+    and my_role() in ('admin', 'manager', 'super_admin')
+  );
+
 -- ─────────────────────────────────────────────────────────────────────────
 -- PHASE 2 : PROVISIONING AUTOMATIQUE À L'INSCRIPTION
 -- ─────────────────────────────────────────────────────────────────────────
@@ -296,18 +322,85 @@ create policy "admin update profiles" on profiles for update using (
 -- self-serve standard. organization_name/full_name sont lus depuis les
 -- métadonnées passées à signUp (options.data).
 
+-- Génère une invitation (code aléatoire) pour l'organisation de l'appelant.
+create or replace function create_invitation(p_role user_role, p_full_name text default '')
+returns invitations
+language plpgsql security definer set search_path = public as $$
+declare
+  v_org uuid := my_organization_id();
+  v_role user_role := my_role();
+  v_code text;
+  v_row invitations;
+begin
+  if v_org is null or v_role not in ('admin', 'manager', 'super_admin') then
+    raise exception 'Seul un administrateur peut inviter un membre.';
+  end if;
+  if p_role = 'super_admin' then
+    raise exception 'Rôle non autorisé pour une invitation.';
+  end if;
+  loop
+    v_code := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
+    exit when not exists (select 1 from invitations where code = v_code);
+  end loop;
+  insert into invitations (organization_id, code, role, full_name, created_by)
+  values (v_org, v_code, p_role, coalesce(nullif(trim(p_full_name), ''), ''), auth.uid())
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+-- Vérifie un code d'invitation (appel public depuis la page d'inscription).
+create or replace function invitation_info(p_code text)
+returns table (organization_name text, role user_role)
+language sql security definer set search_path = public as $$
+  select o.name, i.role
+  from invitations i
+  join organizations o on o.id = i.organization_id
+  where i.code = upper(trim(p_code)) and i.used_by is null
+  limit 1;
+$$;
+
+grant execute on function invitation_info(text) to anon, authenticated;
+grant execute on function create_invitation(user_role, text) to authenticated;
+
+-- Provisioning à l'inscription. Avec un invite_code valide → rejoint
+-- l'organisation invitante et son rôle ; sinon → nouvelle organisation (admin).
 create or replace function handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
   v_org_id uuid;
   v_org_name text;
+  v_code text;
+  v_inv invitations;
 begin
-  v_org_name := coalesce(nullif(trim(new.raw_user_meta_data->>'organization_name'), ''), 'Mon organisation');
+  v_code := upper(nullif(trim(new.raw_user_meta_data->>'invite_code'), ''));
 
+  if v_code is not null then
+    select * into v_inv from invitations
+      where code = v_code and used_by is null
+      limit 1;
+    if v_inv.id is null then
+      raise exception 'Code d''invitation invalide ou déjà utilisé.';
+    end if;
+    insert into profiles (id, organization_id, full_name, role)
+    values (
+      new.id,
+      v_inv.organization_id,
+      coalesce(
+        nullif(trim(new.raw_user_meta_data->>'full_name'), ''),
+        nullif(v_inv.full_name, ''),
+        new.email
+      ),
+      v_inv.role
+    );
+    update invitations set used_by = new.id, used_at = now() where id = v_inv.id;
+    return new;
+  end if;
+
+  v_org_name := coalesce(nullif(trim(new.raw_user_meta_data->>'organization_name'), ''), 'Mon organisation');
   insert into organizations (name, slug)
   values (v_org_name, 'org-' || replace(new.id::text, '-', ''))
   returning id into v_org_id;
-
   insert into profiles (id, organization_id, full_name, role)
   values (
     new.id,
@@ -315,7 +408,6 @@ begin
     coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'), ''), new.email),
     'admin'
   );
-
   return new;
 end;
 $$;
