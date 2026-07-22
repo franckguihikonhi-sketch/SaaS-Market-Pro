@@ -28,13 +28,20 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
+      setLoading(false);
       setError(error.message);
       return;
     }
-    router.push("/dashboard");
+    // Route selon le rôle : une caissière va directement à la caisse.
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", data.user.id)
+      .single();
+    setLoading(false);
+    router.push(prof?.role === "cashier" ? "/pos" : "/dashboard");
   }
 
   return (
