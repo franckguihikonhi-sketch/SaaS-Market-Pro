@@ -40,7 +40,7 @@ export default function Home() {
           href="/signup"
           className={buttonVariants({ variant: "default", className: "bg-emerald-600 hover:bg-emerald-700" })}
         >
-          Créer une organisation
+          Créer un compte
         </Link>
         <Link href="/login" className={buttonVariants({ variant: "outline" })}>
           Se connecter

@@ -92,7 +92,7 @@ export default function LoginPage() {
             <p className="text-sm text-muted-foreground">
               Pas encore de compte ?{" "}
               <Link href="/signup" className="underline">
-                Créer une organisation
+                Créer un compte
               </Link>
             </p>
           </CardFooter>
