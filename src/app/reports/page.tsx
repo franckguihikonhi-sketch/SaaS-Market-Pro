@@ -29,6 +29,16 @@ type Store = { id: string; name: string };
 type Product = { id: string; label: string; min_stock: number };
 type Stock = { product_id: string; quantity: number };
 
+const cfaFormatter = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "XOF",
+  maximumFractionDigits: 0,
+});
+// Montant en francs CFA avec séparateur de milliers (ex. « 1 250 F CFA »).
+function formatCFA(n: number) {
+  return cfaFormatter.format(n);
+}
+
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
@@ -137,13 +147,13 @@ export default function ReportsPage() {
 
   function exportJournal() {
     const rows: (string | number)[][] = [
-      ["Date", "Magasin", "Sous-total TTC", "TVA", "Total"],
+      ["Date", "Magasin", "Sous-total TTC (CFA)", "TVA (CFA)", "Total (CFA)"],
       ...sales.map((s) => [
         new Date(s.created_at).toLocaleString("fr-FR"),
         stores.find((st) => st.id === s.store_id)?.name ?? "",
-        (s.total - s.tax_total).toFixed(2),
-        s.tax_total.toFixed(2),
-        s.total.toFixed(2),
+        Math.round(s.total - s.tax_total),
+        Math.round(s.tax_total),
+        Math.round(s.total),
       ]),
     ];
     downloadCsv(`journal-ventes-${new Date().toISOString().slice(0, 10)}.csv`, rows);
@@ -166,7 +176,7 @@ export default function ReportsPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>CA aujourd&apos;hui</CardDescription>
-              <CardTitle className="text-2xl">{stats.caToday.toFixed(0)}</CardTitle>
+              <CardTitle className="text-2xl">{formatCFA(stats.caToday)}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -178,13 +188,13 @@ export default function ReportsPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>CA cette semaine</CardDescription>
-              <CardTitle className="text-2xl">{stats.caWeek.toFixed(0)}</CardTitle>
+              <CardTitle className="text-2xl">{formatCFA(stats.caWeek)}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>TVA collectée (semaine)</CardDescription>
-              <CardTitle className="text-2xl">{stats.tvaWeek.toFixed(0)}</CardTitle>
+              <CardTitle className="text-2xl">{formatCFA(stats.tvaWeek)}</CardTitle>
             </CardHeader>
           </Card>
         </div>
@@ -212,7 +222,7 @@ export default function ReportsPage() {
                     <TableRow key={p.label}>
                       <TableCell>{p.label}</TableCell>
                       <TableCell>{p.quantity}</TableCell>
-                      <TableCell>{p.revenue.toFixed(2)}</TableCell>
+                      <TableCell className="tabular-nums">{formatCFA(p.revenue)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -285,7 +295,7 @@ export default function ReportsPage() {
                       <TableCell className="text-muted-foreground">
                         {stores.find((st) => st.id === s.store_id)?.name ?? "—"}
                       </TableCell>
-                      <TableCell>{s.total.toFixed(2)}</TableCell>
+                      <TableCell className="tabular-nums">{formatCFA(s.total)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
