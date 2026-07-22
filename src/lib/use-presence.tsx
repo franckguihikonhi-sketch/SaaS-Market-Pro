@@ -28,9 +28,15 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
     if (!profile) return;
 
     // Heartbeat : met à jour last_seen (utilisé par la console plateforme
-    // pour savoir quelles entreprises/agents sont actifs).
-    void supabase.rpc("touch_last_seen");
-    const heartbeat = setInterval(() => void supabase.rpc("touch_last_seen"), 60000);
+    // pour savoir quelles entreprises/agents sont actifs). Signalé au montage,
+    // toutes les 30 s, et dès que l'onglet/écran redevient visible (mobile).
+    const beat = () => void supabase.rpc("touch_last_seen");
+    beat();
+    const heartbeat = setInterval(beat, 30000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") beat();
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
     const channel = supabase.channel(`presence-org-${profile.organization_id}`, {
       config: { presence: { key: profile.id } },
@@ -60,6 +66,7 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       clearInterval(heartbeat);
+      document.removeEventListener("visibilitychange", onVisible);
       setOnline([]);
       void supabase.removeChannel(channel);
     };

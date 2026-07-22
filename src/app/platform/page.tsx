@@ -78,7 +78,7 @@ export default function PlatformPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     void load();
-    const id = setInterval(() => void load(), 20000); // rafraîchit toutes les 20 s
+    const id = setInterval(() => void load(), 5000); // rafraîchit toutes les 5 s
     return () => clearInterval(id);
   }, [load]);
 
