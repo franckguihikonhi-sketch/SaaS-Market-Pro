@@ -55,6 +55,7 @@ create table profiles (
   organization_id uuid not null references organizations on delete cascade,
   store_id uuid,
   full_name text not null,
+  email text,
   role user_role not null default 'cashier',
   created_at timestamptz not null default now()
 );
@@ -382,7 +383,7 @@ begin
     if v_inv.id is null then
       raise exception 'Code d''invitation invalide ou déjà utilisé.';
     end if;
-    insert into profiles (id, organization_id, full_name, role)
+    insert into profiles (id, organization_id, full_name, role, email)
     values (
       new.id,
       v_inv.organization_id,
@@ -391,7 +392,8 @@ begin
         nullif(v_inv.full_name, ''),
         new.email
       ),
-      v_inv.role
+      v_inv.role,
+      new.email
     );
     update invitations set used_by = new.id, used_at = now() where id = v_inv.id;
     return new;
@@ -401,12 +403,13 @@ begin
   insert into organizations (name, slug)
   values (v_org_name, 'org-' || replace(new.id::text, '-', ''))
   returning id into v_org_id;
-  insert into profiles (id, organization_id, full_name, role)
+  insert into profiles (id, organization_id, full_name, role, email)
   values (
     new.id,
     v_org_id,
     coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'), ''), new.email),
-    'admin'
+    'admin',
+    new.email
   );
   return new;
 end;

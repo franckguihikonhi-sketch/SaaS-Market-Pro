@@ -44,7 +44,7 @@ const ROLE_LABELS: Record<string, string> = {
 // Rôles qu'un admin peut attribuer via une invitation (pas super_admin).
 const INVITE_ROLES = ["cashier", "manager", "warehouse_keeper", "accountant", "admin"];
 
-type OrgProfile = Profile & { organization?: { name: string } | null };
+type OrgProfile = Profile & { email?: string | null; organization?: { name: string } | null };
 type Invitation = {
   id: string;
   code: string;
@@ -66,6 +66,7 @@ export default function DashboardPage() {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [resetMsg, setResetMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     if (loading) return;
@@ -80,7 +81,7 @@ export default function DashboardPage() {
       supabase.from("organizations").select("name").eq("id", profile.organization_id).single(),
       supabase
         .from("profiles")
-        .select("id, organization_id, full_name, role")
+        .select("id, organization_id, full_name, role, email")
         .eq("organization_id", profile.organization_id)
         .order("full_name"),
       supabase
@@ -123,6 +124,20 @@ export default function DashboardPage() {
     setInvitations((cur) => cur.filter((i) => i.id !== id));
     const { error } = await supabase.from("invitations").delete().eq("id", id);
     if (error) setInvitations(previous);
+  }
+
+  async function resetPassword(member: OrgProfile) {
+    if (!member.email) {
+      setResetMsg({ text: "Email inconnu pour ce membre.", ok: false });
+      return;
+    }
+    const redirectTo = `${window.location.origin}/SaaS-Market-Pro/reset-password/`;
+    const { error } = await supabase.auth.resetPasswordForEmail(member.email, { redirectTo });
+    setResetMsg(
+      error
+        ? { text: error.message, ok: false }
+        : { text: `Email de réinitialisation envoyé à ${member.email}.`, ok: true }
+    );
   }
 
   useEffect(() => {
@@ -270,6 +285,18 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {resetMsg && (
+              <p
+                className={
+                  "mb-3 rounded-md border px-3 py-2 text-sm " +
+                  (resetMsg.ok
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-destructive/30 bg-destructive/10 text-destructive")
+                }
+              >
+                {resetMsg.text}
+              </p>
+            )}
             {loadingColleagues ? (
               <p className="text-sm text-muted-foreground">Chargement…</p>
             ) : (
@@ -277,7 +304,9 @@ export default function DashboardPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nom</TableHead>
+                    {isAdmin && <TableHead>Email</TableHead>}
                     <TableHead>Rôle</TableHead>
+                    {isAdmin && <TableHead>Mot de passe</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -289,10 +318,13 @@ export default function DashboardPage() {
                           <span className="text-muted-foreground"> (vous)</span>
                         )}
                       </TableCell>
+                      {isAdmin && (
+                        <TableCell className="text-muted-foreground">{colleague.email || "—"}</TableCell>
+                      )}
                       <TableCell>
                         {isAdmin && colleague.id !== profile.id ? (
                           <Select
-                            items={ROLES.map((role) => ({ value: role, label: role }))}
+                            items={ROLES.map((role) => ({ value: role, label: ROLE_LABELS[role] ?? role }))}
                             value={colleague.role}
                             onValueChange={(role) => role && void updateRole(colleague.id, role)}
                           >
@@ -302,15 +334,27 @@ export default function DashboardPage() {
                             <SelectContent>
                               {ROLES.map((role) => (
                                 <SelectItem key={role} value={role}>
-                                  {role}
+                                  {ROLE_LABELS[role] ?? role}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         ) : (
-                          <Badge variant="secondary">{colleague.role}</Badge>
+                          <Badge variant="secondary">{ROLE_LABELS[colleague.role] ?? colleague.role}</Badge>
                         )}
                       </TableCell>
+                      {isAdmin && (
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void resetPassword(colleague)}
+                            disabled={!colleague.email}
+                          >
+                            Réinitialiser
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
