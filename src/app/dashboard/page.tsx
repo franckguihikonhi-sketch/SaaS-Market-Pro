@@ -30,6 +30,7 @@ import {
 import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
 import { useSession, type Profile } from "@/lib/use-session";
+import { useOnlineMembers } from "@/lib/use-presence";
 
 const ROLES = ["super_admin", "admin", "manager", "cashier", "warehouse_keeper", "accountant"];
 
@@ -45,6 +46,7 @@ const ROLE_LABELS: Record<string, string> = {
 const INVITE_ROLES = ["cashier", "manager", "warehouse_keeper", "accountant", "admin"];
 
 type OrgProfile = Profile & { email?: string | null; organization?: { name: string } | null };
+type ResetRequest = { id: string; email: string; full_name: string; requested_at: string };
 type Invitation = {
   id: string;
   code: string;
@@ -57,7 +59,9 @@ type Invitation = {
 export default function DashboardPage() {
   const router = useRouter();
   const { session, profile, loading } = useSession();
+  const onlineMembers = useOnlineMembers();
   const [organizationName, setOrganizationName] = useState<string>("");
+  const [resetRequests, setResetRequests] = useState<ResetRequest[]>([]);
   const [colleagues, setColleagues] = useState<OrgProfile[]>([]);
   const [loadingColleagues, setLoadingColleagues] = useState(true);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -77,7 +81,7 @@ export default function DashboardPage() {
   const loadOrgData = useCallback(async () => {
     if (!profile) return;
     setLoadingColleagues(true);
-    const [{ data: org }, { data: profiles }, { data: invites }] = await Promise.all([
+    const [{ data: org }, { data: profiles }, { data: invites }, { data: resets }] = await Promise.all([
       supabase.from("organizations").select("name").eq("id", profile.organization_id).single(),
       supabase
         .from("profiles")
@@ -89,12 +93,40 @@ export default function DashboardPage() {
         .select("id, code, role, full_name, used_by, created_at")
         .is("used_by", null)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("password_reset_requests")
+        .select("id, email, full_name, requested_at")
+        .is("resolved_at", null)
+        .order("requested_at", { ascending: false }),
     ]);
     setOrganizationName(org?.name ?? "");
     setColleagues((profiles as OrgProfile[]) ?? []);
     setInvitations((invites as Invitation[]) ?? []);
+    setResetRequests((resets as ResetRequest[]) ?? []);
     setLoadingColleagues(false);
   }, [profile]);
+
+  async function processResetRequest(req: ResetRequest, sendEmail: boolean) {
+    if (sendEmail) {
+      const redirectTo = `${window.location.origin}/SaaS-Market-Pro/reset-password/`;
+      const { error } = await supabase.auth.resetPasswordForEmail(req.email, { redirectTo });
+      if (error) {
+        setResetMsg({ text: error.message, ok: false });
+        return;
+      }
+    }
+    await supabase
+      .from("password_reset_requests")
+      .update({ resolved_at: new Date().toISOString() })
+      .eq("id", req.id);
+    setResetRequests((cur) => cur.filter((r) => r.id !== req.id));
+    setResetMsg({
+      text: sendEmail
+        ? `Email de réinitialisation envoyé à ${req.email}.`
+        : "Demande ignorée.",
+      ok: true,
+    });
+  }
 
   async function createInvite() {
     setInviteBusy(true);
@@ -182,6 +214,97 @@ export default function DashboardPage() {
             Se déconnecter
           </Button>
         </div>
+
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                </span>
+                Connectés en temps réel
+              </CardTitle>
+              <CardDescription>
+                {onlineMembers.length} personne{onlineMembers.length > 1 ? "s" : ""} en ligne
+                actuellement
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {onlineMembers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Personne pour l&apos;instant.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {onlineMembers.map((m) => (
+                    <span
+                      key={m.id}
+                      className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span className="font-medium text-slate-800">{m.full_name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {ROLE_LABELS[m.role] ?? m.role}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {isAdmin && resetRequests.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Demandes de réinitialisation</CardTitle>
+              <CardDescription>
+                Des salariés ont oublié leur mot de passe. Cliquez sur « Réinitialiser » pour leur
+                envoyer un email de réinitialisation.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Salarié</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Demandé le</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {resetRequests.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{r.full_name || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{r.email}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(r.requested_at).toLocaleString("fr-FR")}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700"
+                            onClick={() => void processResetRequest(r, true)}
+                          >
+                            Réinitialiser
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void processResetRequest(r, false)}
+                          >
+                            Ignorer
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
 
         {isAdmin && (
           <Card>
