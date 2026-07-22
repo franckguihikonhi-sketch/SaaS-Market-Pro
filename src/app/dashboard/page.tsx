@@ -32,7 +32,10 @@ import { supabase } from "@/lib/supabase";
 import { useSession, type Profile } from "@/lib/use-session";
 import { useOnlineMembers } from "@/lib/use-presence";
 
-const ROLES = ["super_admin", "admin", "manager", "cashier", "warehouse_keeper", "accountant"];
+// Rôles attribuables depuis l'interface. « super_admin » (propriétaire de la
+// plateforme) en est volontairement exclu : il se définit uniquement en base,
+// pour empêcher toute escalade de privilèges depuis une boutique.
+const ROLES = ["admin", "manager", "cashier", "warehouse_keeper", "accountant"];
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super administrateur",

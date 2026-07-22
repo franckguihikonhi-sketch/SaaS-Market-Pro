@@ -548,6 +548,26 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function handle_new_user();
 
+-- Verrou : le rôle super_admin (accès plateforme) ne peut pas être attribué
+-- depuis l'application par un non-super_admin (anti-escalade de privilèges).
+create or replace function guard_super_admin() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.role = 'super_admin'
+     and old.role is distinct from 'super_admin'
+     and auth.uid() is not null
+     and coalesce((select role from profiles where id = auth.uid()), 'cashier') <> 'super_admin' then
+    raise exception 'Le rôle super_admin ne peut être attribué que par le propriétaire de la plateforme.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_guard_super_admin on profiles;
+create trigger trg_guard_super_admin
+  before update on profiles
+  for each row execute function guard_super_admin();
+
 -- ─────────────────────────────────────────────────────────────────────────
 -- PHASE 3 : ARTICLES, UNITÉS ET STOCK
 -- ─────────────────────────────────────────────────────────────────────────
