@@ -465,7 +465,7 @@ returns table (
 language sql security definer set search_path = public as $$
   select o.id, o.name, o.created_at,
     count(p.id) as user_count,
-    count(p.id) filter (where p.last_seen > now() - interval '5 minutes') as active_count,
+    count(p.id) filter (where p.last_seen > now() - interval '90 seconds') as active_count,
     max(p.last_seen) as last_activity
   from organizations o
   left join profiles p on p.organization_id = o.id
@@ -487,10 +487,19 @@ language sql security definer set search_path = public as $$
   from profiles p
   join organizations o on o.id = p.organization_id
   where my_role() = 'super_admin'
-    and p.last_seen > now() - interval '5 minutes'
+    and p.last_seen > now() - interval '90 seconds'
   order by o.name, p.full_name;
 $$;
 grant execute on function platform_agents() to authenticated;
+
+-- Marque l'utilisateur courant hors ligne (appelé juste avant la déconnexion).
+create or replace function go_offline()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  update profiles set last_seen = null where id = auth.uid();
+end;
+$$;
+grant execute on function go_offline() to authenticated;
 
 -- Provisioning à l'inscription. Avec un invite_code valide → rejoint
 -- l'organisation invitante et son rôle ; sinon → nouvelle organisation (admin).

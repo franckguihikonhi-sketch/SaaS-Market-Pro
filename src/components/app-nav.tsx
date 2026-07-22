@@ -45,6 +45,7 @@ export function AppNav() {
       : LINKS;
 
   async function handleSignOut() {
+    await supabase.rpc("go_offline");
     await supabase.auth.signOut();
     router.push("/login");
   }
