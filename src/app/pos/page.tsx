@@ -1005,21 +1005,23 @@ export default function PosPage() {
                             key={l.key}
                             onClick={() => selectLine(l)}
                             className={cn(
-                              "cursor-pointer transition-colors",
-                              editingKey === l.key ? "bg-emerald-100/60" : "hover:bg-slate-50"
+                              "cursor-pointer text-white transition-colors",
+                              editingKey === l.key
+                                ? "bg-blue-700"
+                                : "bg-blue-900 hover:bg-blue-800"
                             )}
                           >
-                            <td className="h-8 px-3 py-0 font-mono text-xs text-slate-500">{l.code}</td>
-                            <td className="h-8 px-3 py-0 font-medium text-slate-800">{l.label}</td>
-                            <td className="h-8 px-3 py-0 text-slate-600">{l.unitCode}</td>
-                            <td className="h-8 px-3 py-0 text-right tabular-nums text-slate-600">
+                            <td className="h-8 px-3 py-0 font-mono text-xs text-blue-200">{l.code}</td>
+                            <td className="h-8 px-3 py-0 font-medium text-white">{l.label}</td>
+                            <td className="h-8 px-3 py-0 text-blue-100">{l.unitCode}</td>
+                            <td className="h-8 px-3 py-0 text-right tabular-nums text-blue-100">
                               {l.unit_price.toFixed(2)}
                             </td>
-                            <td className="h-8 px-3 py-0 text-right tabular-nums text-slate-600">{l.quantity}</td>
-                            <td className="h-8 px-3 py-0 text-right tabular-nums text-slate-600">
+                            <td className="h-8 px-3 py-0 text-right tabular-nums text-blue-100">{l.quantity}</td>
+                            <td className="h-8 px-3 py-0 text-right tabular-nums text-blue-100">
                               {l.discount ? `${l.discount}%` : "—"}
                             </td>
-                            <td className="h-8 px-3 py-0 text-right font-mono font-semibold tabular-nums text-slate-900">
+                            <td className="h-8 px-3 py-0 text-right font-mono font-semibold tabular-nums text-white">
                               {lineAmount(l).toFixed(2)}
                             </td>
                           </tr>
