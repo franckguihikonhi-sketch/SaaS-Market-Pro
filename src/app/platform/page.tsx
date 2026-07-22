@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -35,14 +35,12 @@ type OrgRow = {
   organization_name: string;
   created_at: string;
   user_count: number;
-  active_count: number;
-  last_activity: string | null;
 };
-type AgentRow = {
-  organization_name: string;
+type PresenceMeta = {
+  id: string;
   full_name: string;
   role: string;
-  last_seen: string;
+  online_at: string;
 };
 
 function fmtDate(d: string | null) {
@@ -53,7 +51,7 @@ export default function PlatformPage() {
   const router = useRouter();
   const { session, profile, loading } = useSession();
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
-  const [agents, setAgents] = useState<AgentRow[]>([]);
+  const [onlineByOrg, setOnlineByOrg] = useState<Record<string, PresenceMeta[]>>({});
   const [loadingData, setLoadingData] = useState(true);
 
   const isPlatformOwner = profile?.role === "super_admin";
@@ -64,23 +62,67 @@ export default function PlatformPage() {
     else if (profile && profile.role !== "super_admin") router.push("/dashboard");
   }, [loading, session, profile, router]);
 
-  const load = useCallback(async () => {
+  const loadOrgs = useCallback(async () => {
     if (!isPlatformOwner) return;
-    const [{ data: o }, { data: a }] = await Promise.all([
-      supabase.rpc("platform_overview"),
-      supabase.rpc("platform_agents"),
-    ]);
-    setOrgs((o as OrgRow[]) ?? []);
-    setAgents((a as AgentRow[]) ?? []);
+    const { data } = await supabase.rpc("platform_overview");
+    setOrgs((data as OrgRow[]) ?? []);
     setLoadingData(false);
   }, [isPlatformOwner]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
-    void load();
-    const id = setInterval(() => void load(), 5000); // rafraîchit toutes les 5 s
+    void loadOrgs();
+    const id = setInterval(() => void loadOrgs(), 30000);
     return () => clearInterval(id);
-  }, [load]);
+  }, [loadOrgs]);
+
+  // Présence temps réel : on s'abonne au canal de présence de chaque
+  // entreprise (le même que la carte « Connectés en temps réel »), et on
+  // agrège. La déconnexion est reflétée instantanément (événement leave).
+  const orgIdsKey = orgs.map((o) => o.organization_id).sort().join(",");
+  useEffect(() => {
+    if (!isPlatformOwner || orgs.length === 0) return;
+    const channels = orgs.map((o) => {
+      const ch = supabase.channel(`presence-org-${o.organization_id}`);
+      ch.on("presence", { event: "sync" }, () => {
+        const state = ch.presenceState<PresenceMeta>();
+        const members: PresenceMeta[] = [];
+        for (const key of Object.keys(state)) {
+          const meta = state[key]?.[0];
+          if (meta) members.push(meta);
+        }
+        setOnlineByOrg((prev) => ({ ...prev, [o.organization_id]: members }));
+      });
+      ch.subscribe();
+      return ch;
+    });
+    return () => {
+      channels.forEach((ch) => void supabase.removeChannel(ch));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlatformOwner, orgIdsKey]);
+
+  const orgName = useCallback(
+    (id: string) => orgs.find((o) => o.organization_id === id)?.organization_name ?? "—",
+    [orgs]
+  );
+
+  const agents = useMemo(() => {
+    const list: (PresenceMeta & { organization_id: string })[] = [];
+    for (const orgId of Object.keys(onlineByOrg)) {
+      for (const m of onlineByOrg[orgId]) list.push({ ...m, organization_id: orgId });
+    }
+    return list.sort(
+      (a, b) =>
+        orgName(a.organization_id).localeCompare(orgName(b.organization_id)) ||
+        a.full_name.localeCompare(b.full_name)
+    );
+  }, [onlineByOrg, orgName]);
+
+  const connectedCount = useCallback(
+    (orgId: string) => onlineByOrg[orgId]?.length ?? 0,
+    [onlineByOrg]
+  );
 
   if (loading || !session || !profile || !isPlatformOwner) {
     return (
@@ -91,7 +133,7 @@ export default function PlatformPage() {
   }
 
   const totalUsers = orgs.reduce((s, o) => s + Number(o.user_count), 0);
-  const totalActive = orgs.reduce((s, o) => s + Number(o.active_count), 0);
+  const totalActive = agents.length;
 
   return (
     <div className="min-h-screen bg-muted/30 p-4 sm:p-8">
@@ -101,7 +143,7 @@ export default function PlatformPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Console plateforme</h1>
           <p className="text-sm text-muted-foreground">
-            Vue d&apos;ensemble de toutes les entreprises clientes (mise à jour automatique).
+            Vue d&apos;ensemble de toutes les entreprises clientes — présence en temps réel.
           </p>
         </div>
 
@@ -149,7 +191,6 @@ export default function PlatformPage() {
                     <TableHead>Entreprise</TableHead>
                     <TableHead className="text-right">Utilisateurs</TableHead>
                     <TableHead className="text-right">Connectés</TableHead>
-                    <TableHead>Dernière activité</TableHead>
                     <TableHead>Créée le</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -159,16 +200,15 @@ export default function PlatformPage() {
                       <TableCell className="font-medium">{o.organization_name}</TableCell>
                       <TableCell className="text-right tabular-nums">{o.user_count}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {Number(o.active_count) > 0 ? (
+                        {connectedCount(o.organization_id) > 0 ? (
                           <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600">
                             <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                            {o.active_count}
+                            {connectedCount(o.organization_id)}
                           </span>
                         ) : (
                           <span className="text-muted-foreground">0</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{fmtDate(o.last_activity)}</TableCell>
                       <TableCell className="text-muted-foreground">{fmtDate(o.created_at)}</TableCell>
                     </TableRow>
                   ))}
@@ -187,7 +227,7 @@ export default function PlatformPage() {
               </span>
               Agents connectés maintenant
             </CardTitle>
-            <CardDescription>Utilisateurs actifs sur les 5 dernières minutes, toutes entreprises.</CardDescription>
+            <CardDescription>En temps réel, toutes entreprises confondues.</CardDescription>
           </CardHeader>
           <CardContent>
             {agents.length === 0 ? (
@@ -199,17 +239,17 @@ export default function PlatformPage() {
                     <TableHead>Entreprise</TableHead>
                     <TableHead>Agent</TableHead>
                     <TableHead>Rôle</TableHead>
-                    <TableHead>Vu à</TableHead>
+                    <TableHead>Depuis</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {agents.map((a, i) => (
-                    <TableRow key={`${a.organization_name}-${a.full_name}-${i}`}>
-                      <TableCell className="font-medium">{a.organization_name}</TableCell>
+                  {agents.map((a) => (
+                    <TableRow key={a.id}>
+                      <TableCell className="font-medium">{orgName(a.organization_id)}</TableCell>
                       <TableCell>{a.full_name}</TableCell>
                       <TableCell>{ROLE_LABELS[a.role] ?? a.role}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {new Date(a.last_seen).toLocaleTimeString("fr-FR", {
+                        {new Date(a.online_at).toLocaleTimeString("fr-FR", {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
