@@ -57,6 +57,11 @@ export function MaintenanceProvider({ children }: { children: React.ReactNode })
       const row = (data as { organization_id: string; organization_name: string }[] | null)?.[0];
       setActiveOrgId(row?.organization_id ?? null);
       setActiveOrgName(row?.organization_name ?? null);
+      // La base fait foi : on resynchronise localStorage (lu par useSession).
+      if (typeof window !== "undefined") {
+        if (row?.organization_id) window.localStorage.setItem("mp_active_org", row.organization_id);
+        else window.localStorage.removeItem("mp_active_org");
+      }
       setReady(true);
     }
     void load();
@@ -66,14 +71,24 @@ export function MaintenanceProvider({ children }: { children: React.ReactNode })
   }, [profile, isPlatformOwner]);
 
   // On recharge complètement la page en changeant de contexte : chaque écran
-  // relit alors l'organisation effective (my_organization_id) via useSession.
+  // relit alors l'organisation effective via useSession (localStorage).
   const enter = useCallback(async (orgId: string) => {
-    await supabase.rpc("set_active_org", { p_org: orgId });
+    const { error } = await supabase.rpc("set_active_org", { p_org: orgId });
+    if (error) {
+      window.alert(
+        "Impossible d'ouvrir cette entreprise en maintenance.\n\n" +
+          error.message +
+          "\n\nVérifiez que la migration 009 (et 011) a bien été exécutée dans Supabase."
+      );
+      return;
+    }
+    window.localStorage.setItem("mp_active_org", orgId);
     window.location.assign(`${BASE_PATH}/dashboard/`);
   }, []);
 
   const exit = useCallback(async () => {
     await supabase.rpc("clear_active_org");
+    window.localStorage.removeItem("mp_active_org");
     window.location.assign(`${BASE_PATH}/platform/`);
   }, []);
 
