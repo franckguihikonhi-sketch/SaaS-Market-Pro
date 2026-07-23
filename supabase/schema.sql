@@ -46,6 +46,7 @@ create table organizations (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   slug text not null unique,
+  max_seats int not null default 3,
   created_at timestamptz not null default now()
 );
 
@@ -459,21 +460,35 @@ returns table (
   organization_name text,
   created_at timestamptz,
   user_count bigint,
+  max_seats int,
   active_count bigint,
   last_activity timestamptz
 )
 language sql security definer set search_path = public as $$
   select o.id, o.name, o.created_at,
     count(p.id) as user_count,
+    o.max_seats,
     count(p.id) filter (where p.last_seen > now() - interval '90 seconds') as active_count,
     max(p.last_seen) as last_activity
   from organizations o
   left join profiles p on p.organization_id = o.id
-  where my_role() = 'super_admin'
-  group by o.id, o.name, o.created_at
+  where my_role() = 'super_admin' and o.id <> my_organization_id()
+  group by o.id, o.name, o.created_at, o.max_seats
   order by o.name;
 $$;
 grant execute on function platform_overview() to authenticated;
+
+-- Réglage du nombre de postes d'une organisation (super_admin uniquement).
+create or replace function set_org_seats(p_org uuid, p_seats int)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if my_role() <> 'super_admin' then
+    raise exception 'Réservé au propriétaire de la plateforme.';
+  end if;
+  update organizations set max_seats = greatest(1, p_seats) where id = p_org;
+end;
+$$;
+grant execute on function set_org_seats(uuid, int) to authenticated;
 
 create or replace function platform_agents()
 returns table (

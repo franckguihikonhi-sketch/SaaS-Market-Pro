@@ -38,10 +38,11 @@ export function AppNav() {
 
   const isCashier = profile?.role === "cashier";
   const isPlatformOwner = profile?.role === "super_admin";
-  const links = isCashier
-    ? LINKS.filter((l) => CASHIER_LINKS.has(l.href))
-    : isPlatformOwner
-      ? [{ href: "/platform", label: "Plateforme", icon: Globe }, ...LINKS]
+  // Le propriétaire de la plateforme ne gère pas de boutique : seule la console.
+  const links = isPlatformOwner
+    ? [{ href: "/platform", label: "Plateforme", icon: Globe }]
+    : isCashier
+      ? LINKS.filter((l) => CASHIER_LINKS.has(l.href))
       : LINKS;
 
   async function handleSignOut() {

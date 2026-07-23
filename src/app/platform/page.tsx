@@ -17,8 +17,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
+import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/use-session";
 import { useOnlineMembers } from "@/lib/use-presence";
 
@@ -36,6 +38,7 @@ type OrgRow = {
   organization_name: string;
   created_at: string;
   user_count: number;
+  max_seats: number;
 };
 
 function fmtDate(d: string | null) {
@@ -45,7 +48,8 @@ function fmtDate(d: string | null) {
 export default function PlatformPage() {
   const router = useRouter();
   const { session, profile, loading } = useSession();
-  const online = useOnlineMembers();
+  // Présence : on ignore le super_admin (le propriétaire n'est pas un agent client).
+  const online = useOnlineMembers().filter((m) => m.role !== "super_admin");
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -75,6 +79,12 @@ export default function PlatformPage() {
     (id: string) => orgs.find((o) => o.organization_id === id)?.organization_name ?? "—",
     [orgs]
   );
+
+  async function saveSeats(orgId: string, seats: number) {
+    if (!Number.isFinite(seats) || seats < 1) return;
+    await supabase.rpc("set_org_seats", { p_org: orgId, p_seats: Math.round(seats) });
+    void loadOrgs();
+  }
 
   const agents = useMemo(
     () =>
@@ -151,7 +161,7 @@ export default function PlatformPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Entreprise</TableHead>
-                    <TableHead className="text-right">Utilisateurs</TableHead>
+                    <TableHead className="text-right">Postes (utilisés / max)</TableHead>
                     <TableHead className="text-right">Connectés</TableHead>
                     <TableHead>Créée le</TableHead>
                   </TableRow>
@@ -160,7 +170,27 @@ export default function PlatformPage() {
                   {orgs.map((o) => (
                     <TableRow key={o.organization_id}>
                       <TableCell className="font-medium">{o.organization_name}</TableCell>
-                      <TableCell className="text-right tabular-nums">{o.user_count}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span
+                            className={cn(
+                              "font-medium",
+                              Number(o.user_count) >= o.max_seats && "text-red-600"
+                            )}
+                          >
+                            {o.user_count}
+                          </span>
+                          <span className="text-muted-foreground">/</span>
+                          <Input
+                            type="number"
+                            min="1"
+                            key={`${o.organization_id}-${o.max_seats}`}
+                            defaultValue={o.max_seats}
+                            onBlur={(e) => void saveSeats(o.organization_id, Number(e.target.value))}
+                            className="h-7 w-16 text-right"
+                          />
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {connectedFor(o.organization_id) > 0 ? (
                           <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600">
