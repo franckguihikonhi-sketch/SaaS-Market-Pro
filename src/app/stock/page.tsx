@@ -398,25 +398,21 @@ export default function StockPage() {
                   </SelectContent>
                 </Select>
               )}
+              {canWrite && (
+                <Button onClick={() => router.push("/purchases")}>
+                  <PackagePlus className="h-4 w-4" />
+                  Entrée d&apos;article (Achat)
+                </Button>
+              )}
               {canWrite && warehouseId && products.length > 0 && (
-                <>
-                  <RecordMovementDialog
-                    warehouseId={warehouseId}
-                    products={products}
-                    onRecorded={loadWarehouseData}
-                    initialType="purchase_receipt"
-                    label="Entrée d'article (Achat)"
-                    icon={<PackagePlus className="h-4 w-4" />}
-                  />
-                  <RecordMovementDialog
-                    warehouseId={warehouseId}
-                    products={products}
-                    onRecorded={loadWarehouseData}
-                    initialType="adjustment"
-                    label="Autre mouvement"
-                    variant="outline"
-                  />
-                </>
+                <RecordMovementDialog
+                  warehouseId={warehouseId}
+                  products={products}
+                  onRecorded={loadWarehouseData}
+                  initialType="adjustment"
+                  label="Autre mouvement"
+                  variant="outline"
+                />
               )}
             </div>
           </CardHeader>

@@ -11,6 +11,7 @@ import {
   LogOut,
   Package,
   Power,
+  ShoppingBag,
   ShoppingCart,
   Store,
   Users,
@@ -29,13 +30,14 @@ const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/stores", label: "Magasins", icon: Store },
   { href: "/products", label: "Articles", icon: Package },
   { href: "/stock", label: "Stock", icon: Boxes },
+  { href: "/purchases", label: "Achats", icon: ShoppingBag },
   { href: "/reports", label: "Rapports", icon: BarChart3 },
 ];
 
 // Une caissière ne voit que l'interface de vente.
 const CASHIER_LINKS = new Set(["/pos"]);
-// Un gestionnaire de stock ne voit que l'interface de stock.
-const WAREHOUSE_LINKS = new Set(["/stock"]);
+// Un gestionnaire de stock voit le stock et les achats (son métier).
+const WAREHOUSE_LINKS = new Set(["/stock", "/purchases"]);
 
 export function AppNav() {
   const pathname = usePathname();
