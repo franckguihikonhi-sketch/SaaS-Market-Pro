@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Wrench } from "lucide-react";
+import { StatCard } from "@/components/ui/stat-card";
+import { Building2, Users, Wifi, Wrench } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -129,30 +130,22 @@ export default function PlatformPage() {
         </div>
 
         <div className="grid grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Entreprises</CardDescription>
-              <CardTitle className="text-lg sm:text-2xl">{orgs.length}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Utilisateurs</CardDescription>
-              <CardTitle className="text-lg sm:text-2xl">{totalUsers}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Agents connectés</CardDescription>
-              <CardTitle className="flex items-center gap-2 text-lg sm:text-2xl">
+          <StatCard title="Entreprises" value={orgs.length} icon={<Building2 className="h-4 w-4" />} />
+          <StatCard title="Utilisateurs" value={totalUsers} icon={<Users className="h-4 w-4" />} />
+          <StatCard
+            title="Agents connectés"
+            value={
+              <span className="flex items-center gap-2">
                 <span className="relative flex h-2.5 w-2.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                 </span>
                 {online.length}
-              </CardTitle>
-            </CardHeader>
-          </Card>
+              </span>
+            }
+            tone="positive"
+            icon={<Wifi className="h-4 w-4" />}
+          />
         </div>
 
         <Card>

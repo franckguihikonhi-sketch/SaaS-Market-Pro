@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Printer, Trash2, ShoppingBag } from "lucide-react";
+import { Plus, Printer, Trash2, ShoppingBag, Wallet, CircleAlert } from "lucide-react";
+import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -578,30 +579,14 @@ export default function PurchasesPage() {
         </div>
 
         <div className="grid grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Achats</CardDescription>
-              <CardTitle className="text-lg sm:text-2xl">{purchases.length}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Total achats</CardDescription>
-              <CardTitle className="text-lg tabular-nums sm:text-2xl">{fmtMoney(totalAchats)}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card className={totalDu > 0 ? "border-amber-300" : undefined}>
-            <CardHeader className="pb-2">
-              <CardDescription>Reste dû (fournisseurs)</CardDescription>
-              <CardTitle
-                className={
-                  "text-lg tabular-nums sm:text-2xl " + (totalDu > 0 ? "text-amber-700" : "text-emerald-700")
-                }
-              >
-                {fmtMoney(totalDu)}
-              </CardTitle>
-            </CardHeader>
-          </Card>
+          <StatCard title="Achats" value={purchases.length} icon={<ShoppingBag className="h-4 w-4" />} />
+          <StatCard title="Total achats" value={fmtMoney(totalAchats)} icon={<Wallet className="h-4 w-4" />} />
+          <StatCard
+            title="Reste dû (fournisseurs)"
+            value={fmtMoney(totalDu)}
+            tone={totalDu > 0 ? "warning" : "positive"}
+            icon={<CircleAlert className="h-4 w-4" />}
+          />
         </div>
 
         <Card>
