@@ -27,10 +27,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Moon, Sun } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
 import { useSession, type Profile } from "@/lib/use-session";
 import { useOnlineMembers } from "@/lib/use-presence";
+import { useMaintenance } from "@/lib/use-maintenance";
 
 // Rôles attribuables depuis l'interface. « super_admin » (propriétaire de la
 // plateforme) en est volontairement exclu : il se définit uniquement en base,
@@ -48,7 +50,11 @@ const ROLE_LABELS: Record<string, string> = {
 // Rôles qu'un admin peut attribuer via une invitation (pas super_admin).
 const INVITE_ROLES = ["cashier", "manager", "warehouse_keeper", "accountant", "admin"];
 
-type OrgProfile = Profile & { email?: string | null; organization?: { name: string } | null };
+type OrgProfile = Profile & {
+  email?: string | null;
+  organization?: { name: string } | null;
+  suspended?: boolean;
+};
 type ResetRequest = { id: string; email: string; full_name: string; requested_at: string };
 type LoginEvent = { id: string; full_name: string; role: string; logged_in_at: string };
 type Invitation = {
@@ -63,6 +69,7 @@ type Invitation = {
 export default function DashboardPage() {
   const router = useRouter();
   const { session, profile, loading } = useSession();
+  const { activeOrgId } = useMaintenance();
   const allOnline = useOnlineMembers();
   // Présence globale → on ne garde que les membres de SA propre organisation.
   const onlineMembers = allOnline.filter((m) => m.organization_id === profile?.organization_id);
@@ -94,7 +101,7 @@ export default function DashboardPage() {
       supabase.from("organizations").select("name").eq("id", profile.organization_id).single(),
       supabase
         .from("profiles")
-        .select("id, organization_id, full_name, role, email")
+        .select("id, organization_id, full_name, role, email, suspended")
         .eq("organization_id", profile.organization_id)
         .order("full_name"),
       supabase
@@ -199,6 +206,21 @@ export default function DashboardPage() {
     if (error) setColleagues(previous);
   }
 
+  // Mise en sommeil / réveil (réservé au propriétaire de la plateforme, en
+  // mode maintenance sur l'organisation ouverte).
+  async function toggleSuspend(colleagueId: string, suspend: boolean) {
+    const previous = colleagues;
+    setColleagues((cur) => cur.map((c) => (c.id === colleagueId ? { ...c, suspended: suspend } : c)));
+    const { error } = await supabase.rpc("set_user_suspended", {
+      p_user: colleagueId,
+      p_suspended: suspend,
+    });
+    if (error) {
+      setColleagues(previous);
+      setResetMsg({ text: error.message, ok: false });
+    }
+  }
+
   async function handleSignOut() {
     await supabase.auth.signOut();
     router.push("/login");
@@ -213,6 +235,9 @@ export default function DashboardPage() {
   }
 
   const isAdmin = profile.role === "admin" || profile.role === "super_admin";
+  // Seul Franck (super_admin), en maintenance sur une entreprise, peut mettre
+  // ses membres en sommeil / les réveiller.
+  const canSuspend = profile.role === "super_admin" && Boolean(activeOrgId);
 
   return (
     <div className="min-h-screen bg-muted/30 p-4 sm:p-8">
@@ -452,15 +477,23 @@ export default function DashboardPage() {
                     {isAdmin && <TableHead>Email</TableHead>}
                     <TableHead>Rôle</TableHead>
                     {isAdmin && <TableHead>Mot de passe</TableHead>}
+                    {canSuspend && <TableHead>Accès</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {colleagues.map((colleague) => (
                     <TableRow key={colleague.id}>
                       <TableCell>
-                        {colleague.full_name}
+                        <span className={colleague.suspended ? "text-muted-foreground line-through" : undefined}>
+                          {colleague.full_name}
+                        </span>
                         {colleague.id === profile.id && (
                           <span className="text-muted-foreground"> (vous)</span>
+                        )}
+                        {colleague.suspended && (
+                          <Badge variant="secondary" className="ml-2 gap-1 text-amber-700">
+                            <Moon className="h-3 w-3" /> En sommeil
+                          </Badge>
                         )}
                       </TableCell>
                       {isAdmin && (
@@ -498,6 +531,29 @@ export default function DashboardPage() {
                           >
                             Réinitialiser
                           </Button>
+                        </TableCell>
+                      )}
+                      {canSuspend && (
+                        <TableCell>
+                          {colleague.suspended ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void toggleSuspend(colleague.id, false)}
+                            >
+                              <Sun className="h-3.5 w-3.5" />
+                              Réveiller
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void toggleSuspend(colleague.id, true)}
+                            >
+                              <Moon className="h-3.5 w-3.5" />
+                              Mettre en sommeil
+                            </Button>
+                          )}
                         </TableCell>
                       )}
                     </TableRow>
