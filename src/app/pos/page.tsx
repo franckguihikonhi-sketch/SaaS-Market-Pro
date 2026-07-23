@@ -90,6 +90,13 @@ function lineAmount(l: TicketLine) {
   return l.quantity * l.unit_price * (1 - l.discount / 100);
 }
 
+// Montant avec séparateur de milliers (espace), 2 décimales — ex. « 3 500.00 ».
+function fmtMoney(n: number) {
+  const [int, dec] = Math.abs(n).toFixed(2).split(".");
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return `${n < 0 ? "-" : ""}${grouped}.${dec}`;
+}
+
 function printWithTarget(target: "80mm" | "a4") {
   document.documentElement.setAttribute("data-print-target", target);
   const style = document.createElement("style");
@@ -825,7 +832,7 @@ export default function PosPage() {
                     Total TTC
                   </span>
                   <span className="font-mono text-2xl font-bold tabular-nums text-emerald-400">
-                    {totals.total.toFixed(2)}
+                    {fmtMoney(totals.total)}
                   </span>
                 </div>
               </div>
@@ -1013,14 +1020,14 @@ export default function PosPage() {
                             <td className="h-8 px-3 py-0 font-medium text-white">{l.label}</td>
                             <td className="h-8 px-3 py-0 text-blue-100">{l.unitCode}</td>
                             <td className="h-8 px-3 py-0 text-right tabular-nums text-blue-100">
-                              {l.unit_price.toFixed(2)}
+                              {fmtMoney(l.unit_price)}
                             </td>
                             <td className="h-8 px-3 py-0 text-right tabular-nums text-blue-100">{l.quantity}</td>
                             <td className="h-8 px-3 py-0 text-right tabular-nums text-blue-100">
                               {l.discount ? `${l.discount}%` : "—"}
                             </td>
                             <td className="h-8 bg-orange-200 px-3 py-0 text-right font-mono font-semibold tabular-nums text-orange-900">
-                              {lineAmount(l).toFixed(2)}
+                              {fmtMoney(lineAmount(l))}
                             </td>
                           </tr>
                         ))
@@ -1051,7 +1058,7 @@ export default function PosPage() {
                           paymentBalanced ? "text-emerald-600" : "text-amber-600"
                         )}
                       >
-                        {paidTotal.toFixed(2)} / {totals.total.toFixed(2)}
+                        {fmtMoney(paidTotal)} / {fmtMoney(totals.total)}
                       </span>
                     </div>
                     <div className="max-h-28 overflow-y-auto">
@@ -1221,7 +1228,7 @@ export default function PosPage() {
                       À rendre
                     </span>
                     <span className="font-mono text-xl font-bold tabular-nums text-emerald-400">
-                      {changeDue.toFixed(2)}
+                      {fmtMoney(changeDue)}
                     </span>
                   </div>
                 </div>
@@ -1323,24 +1330,24 @@ export default function PosPage() {
                 <div>{l.label}</div>
                 <div className="flex justify-between">
                   <span>
-                    {l.quantity} {l.unitLabel} × {l.unit_price.toFixed(2)}
+                    {l.quantity} {l.unitLabel} × {fmtMoney(l.unit_price)}
                   </span>
-                  <span>{(l.quantity * l.unit_price).toFixed(2)}</span>
+                  <span>{fmtMoney(l.quantity * l.unit_price)}</span>
                 </div>
               </div>
             ))}
             <hr className="my-1 border-dashed border-black" />
             <div className="flex justify-between">
               <span>Sous-total</span>
-              <span>{lastReceipt.subtotal.toFixed(2)}</span>
+              <span>{fmtMoney(lastReceipt.subtotal)}</span>
             </div>
             <div className="flex justify-between">
               <span>TVA</span>
-              <span>{lastReceipt.tax.toFixed(2)}</span>
+              <span>{fmtMoney(lastReceipt.tax)}</span>
             </div>
             <div className="flex justify-between text-sm font-bold">
               <span>TOTAL</span>
-              <span>{lastReceipt.total.toFixed(2)}</span>
+              <span>{fmtMoney(lastReceipt.total)}</span>
             </div>
             <p className="mt-2 text-center">Merci de votre visite !</p>
           </div>
@@ -1376,8 +1383,8 @@ export default function PosPage() {
                   <td className="py-1">{l.label}</td>
                   <td className="py-1">{l.quantity}</td>
                   <td className="py-1">{l.unitLabel}</td>
-                  <td className="py-1 text-right">{l.unit_price.toFixed(2)}</td>
-                  <td className="py-1 text-right">{(l.quantity * l.unit_price).toFixed(2)}</td>
+                  <td className="py-1 text-right">{fmtMoney(l.unit_price)}</td>
+                  <td className="py-1 text-right">{fmtMoney(l.quantity * l.unit_price)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1386,15 +1393,15 @@ export default function PosPage() {
             <div className="flex w-64 flex-col gap-1">
               <div className="flex justify-between">
                 <span>Sous-total</span>
-                <span>{lastReceipt.subtotal.toFixed(2)}</span>
+                <span>{fmtMoney(lastReceipt.subtotal)}</span>
               </div>
               <div className="flex justify-between">
                 <span>TVA</span>
-                <span>{lastReceipt.tax.toFixed(2)}</span>
+                <span>{fmtMoney(lastReceipt.tax)}</span>
               </div>
               <div className="flex justify-between border-t border-black pt-1 text-base font-bold">
                 <span>TOTAL</span>
-                <span>{lastReceipt.total.toFixed(2)}</span>
+                <span>{fmtMoney(lastReceipt.total)}</span>
               </div>
             </div>
           </div>
@@ -1404,7 +1411,7 @@ export default function PosPage() {
               {lastReceipt.payments.map((p, i) => (
                 <div key={i} className="flex justify-between">
                   <span>{PAYMENT_METHODS.find((m) => m.value === p.method)?.label ?? p.method}</span>
-                  <span>{p.amount.toFixed(2)}</span>
+                  <span>{fmtMoney(p.amount)}</span>
                 </div>
               ))}
             </div>
