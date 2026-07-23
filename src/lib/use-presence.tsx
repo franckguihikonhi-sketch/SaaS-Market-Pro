@@ -8,6 +8,7 @@ export type OnlineMember = {
   id: string;
   full_name: string;
   role: string;
+  organization_id: string;
   online_at: string;
 };
 
@@ -17,9 +18,10 @@ export function useOnlineMembers() {
   return useContext(PresenceContext);
 }
 
-// Suit la présence en temps réel de tous les membres connectés de
-// l'organisation (Supabase Realtime Presence). Chaque utilisateur connecté
-// « track » sa présence ; l'admin lit la liste via useOnlineMembers().
+// Présence en temps réel via UN canal global partagé. Chaque utilisateur
+// connecté « track » sa présence (avec son organisation). Les écrans lisent
+// la liste via useOnlineMembers() : la page Équipe filtre sur sa propre
+// organisation, la console Plateforme voit tout le monde.
 export function PresenceProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useSession();
   const [online, setOnline] = useState<OnlineMember[]>([]);
@@ -27,7 +29,7 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!profile) return;
 
-    const channel = supabase.channel(`presence-org-${profile.organization_id}`, {
+    const channel = supabase.channel("presence-all", {
       config: { presence: { key: profile.id } },
     });
 
@@ -48,6 +50,7 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
           id: profile.id,
           full_name: profile.full_name,
           role: profile.role,
+          organization_id: profile.organization_id,
           online_at: new Date().toISOString(),
         });
       }

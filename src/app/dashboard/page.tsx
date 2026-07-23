@@ -63,7 +63,9 @@ type Invitation = {
 export default function DashboardPage() {
   const router = useRouter();
   const { session, profile, loading } = useSession();
-  const onlineMembers = useOnlineMembers();
+  const allOnline = useOnlineMembers();
+  // Présence globale → on ne garde que les membres de SA propre organisation.
+  const onlineMembers = allOnline.filter((m) => m.organization_id === profile?.organization_id);
   const [organizationName, setOrganizationName] = useState<string>("");
   const [resetRequests, setResetRequests] = useState<ResetRequest[]>([]);
   const [loginEvents, setLoginEvents] = useState<LoginEvent[]>([]);

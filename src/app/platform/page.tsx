@@ -20,6 +20,7 @@ import {
 import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
 import { useSession } from "@/lib/use-session";
+import { useOnlineMembers } from "@/lib/use-presence";
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super administrateur",
@@ -36,12 +37,6 @@ type OrgRow = {
   created_at: string;
   user_count: number;
 };
-type PresenceMeta = {
-  id: string;
-  full_name: string;
-  role: string;
-  online_at: string;
-};
 
 function fmtDate(d: string | null) {
   return d ? new Date(d).toLocaleString("fr-FR") : "—";
@@ -50,8 +45,8 @@ function fmtDate(d: string | null) {
 export default function PlatformPage() {
   const router = useRouter();
   const { session, profile, loading } = useSession();
+  const online = useOnlineMembers();
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
-  const [onlineByOrg, setOnlineByOrg] = useState<Record<string, PresenceMeta[]>>({});
   const [loadingData, setLoadingData] = useState(true);
 
   const isPlatformOwner = profile?.role === "super_admin";
@@ -76,52 +71,19 @@ export default function PlatformPage() {
     return () => clearInterval(id);
   }, [loadOrgs]);
 
-  // Présence temps réel : on s'abonne au canal de présence de chaque
-  // entreprise (le même que la carte « Connectés en temps réel »), et on
-  // agrège. La déconnexion est reflétée instantanément (événement leave).
-  const orgIdsKey = orgs.map((o) => o.organization_id).sort().join(",");
-  useEffect(() => {
-    if (!isPlatformOwner || orgs.length === 0) return;
-    const channels = orgs.map((o) => {
-      const ch = supabase.channel(`presence-org-${o.organization_id}`);
-      ch.on("presence", { event: "sync" }, () => {
-        const state = ch.presenceState<PresenceMeta>();
-        const members: PresenceMeta[] = [];
-        for (const key of Object.keys(state)) {
-          const meta = state[key]?.[0];
-          if (meta) members.push(meta);
-        }
-        setOnlineByOrg((prev) => ({ ...prev, [o.organization_id]: members }));
-      });
-      ch.subscribe();
-      return ch;
-    });
-    return () => {
-      channels.forEach((ch) => void supabase.removeChannel(ch));
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlatformOwner, orgIdsKey]);
-
   const orgName = useCallback(
     (id: string) => orgs.find((o) => o.organization_id === id)?.organization_name ?? "—",
     [orgs]
   );
 
-  const agents = useMemo(() => {
-    const list: (PresenceMeta & { organization_id: string })[] = [];
-    for (const orgId of Object.keys(onlineByOrg)) {
-      for (const m of onlineByOrg[orgId]) list.push({ ...m, organization_id: orgId });
-    }
-    return list.sort(
-      (a, b) =>
-        orgName(a.organization_id).localeCompare(orgName(b.organization_id)) ||
-        a.full_name.localeCompare(b.full_name)
-    );
-  }, [onlineByOrg, orgName]);
-
-  const connectedCount = useCallback(
-    (orgId: string) => onlineByOrg[orgId]?.length ?? 0,
-    [onlineByOrg]
+  const agents = useMemo(
+    () =>
+      [...online].sort(
+        (a, b) =>
+          orgName(a.organization_id).localeCompare(orgName(b.organization_id)) ||
+          a.full_name.localeCompare(b.full_name)
+      ),
+    [online, orgName]
   );
 
   if (loading || !session || !profile || !isPlatformOwner) {
@@ -133,7 +95,7 @@ export default function PlatformPage() {
   }
 
   const totalUsers = orgs.reduce((s, o) => s + Number(o.user_count), 0);
-  const totalActive = agents.length;
+  const connectedFor = (orgId: string) => online.filter((m) => m.organization_id === orgId).length;
 
   return (
     <div className="min-h-screen bg-muted/30 p-4 sm:p-8">
@@ -168,7 +130,7 @@ export default function PlatformPage() {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                 </span>
-                {totalActive}
+                {online.length}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -200,10 +162,10 @@ export default function PlatformPage() {
                       <TableCell className="font-medium">{o.organization_name}</TableCell>
                       <TableCell className="text-right tabular-nums">{o.user_count}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {connectedCount(o.organization_id) > 0 ? (
+                        {connectedFor(o.organization_id) > 0 ? (
                           <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600">
                             <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                            {connectedCount(o.organization_id)}
+                            {connectedFor(o.organization_id)}
                           </span>
                         ) : (
                           <span className="text-muted-foreground">0</span>
