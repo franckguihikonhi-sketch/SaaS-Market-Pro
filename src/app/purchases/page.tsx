@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, ShoppingBag } from "lucide-react";
+import { Plus, Printer, Trash2, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,6 +55,7 @@ type PurchaseRow = {
   reference: string;
   total: number;
   paid: number;
+  supplier_id: string | null;
   supplier: { name: string } | null;
 };
 
@@ -63,6 +64,13 @@ const PAYMENT_METHODS = [
   { value: "mobile_money", label: "Mobile Money" },
   { value: "card", label: "Carte" },
   { value: "check", label: "Chèque" },
+];
+
+const STATUS_FILTERS = [
+  { value: "all", label: "Tous statuts" },
+  { value: "unpaid", label: "Impayé" },
+  { value: "partial", label: "Partiel" },
+  { value: "paid", label: "Payé" },
 ];
 
 // Formatage CFA avec séparateur de milliers.
@@ -194,6 +202,66 @@ function PurchaseDetailDialog({ purchase }: { purchase: PurchaseRow }) {
     setLoading(false);
   }
 
+  function printPurchase() {
+    const remaining = Number(purchase.total) - Number(purchase.paid);
+    const rows = lines
+      .map(
+        (l) =>
+          `<tr><td>${l.label}</td><td class="r">${Number(l.quantity)}</td><td class="r">${fmtMoney(
+            l.unit_price
+          )}</td><td class="r">${fmtMoney(l.line_total)}</td></tr>`
+      )
+      .join("");
+    const pays = payments
+      .map(
+        (p) =>
+          `<tr><td>${new Date(p.paid_at).toLocaleDateString("fr-FR")}</td><td>${methodLabel(
+            p.method
+          )}</td><td class="r">${fmtMoney(p.amount)}</td></tr>`
+      )
+      .join("");
+    const w = window.open("", "_blank", "width=800,height=900");
+    if (!w) return;
+    w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Bon d'achat</title>
+      <style>
+        body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:24px;max-width:720px;margin:auto}
+        h1{font-size:20px;margin:0 0 4px}
+        .muted{color:#64748b;font-size:13px}
+        table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+        th,td{border-bottom:1px solid #e2e8f0;padding:6px 8px;text-align:left}
+        th{background:#f8fafc}
+        .r{text-align:right}
+        .totals{margin-top:12px;width:280px;margin-left:auto;font-size:14px}
+        .totals div{display:flex;justify-content:space-between;padding:2px 0}
+        .totals .due{font-weight:bold}
+        .sec{margin-top:20px;font-size:12px;text-transform:uppercase;color:#64748b;letter-spacing:.04em}
+      </style></head><body>
+      <h1>Bon d'achat</h1>
+      <div class="muted">
+        Fournisseur : <strong>${purchase.supplier?.name ?? "—"}</strong><br>
+        Date : ${new Date(purchase.created_at).toLocaleString("fr-FR")}${
+      purchase.reference ? `<br>Référence : ${purchase.reference}` : ""
+    }
+      </div>
+      <div class="sec">Articles</div>
+      <table><thead><tr><th>Article</th><th class="r">Qté</th><th class="r">P.U.</th><th class="r">Total</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <div class="totals">
+        <div><span>Total achat</span><span>${fmtMoney(purchase.total)} CFA</span></div>
+        <div><span>Payé</span><span>${fmtMoney(purchase.paid)} CFA</span></div>
+        <div class="due"><span>Reste dû</span><span>${fmtMoney(remaining)} CFA</span></div>
+      </div>
+      ${
+        pays
+          ? `<div class="sec">Règlements</div><table><thead><tr><th>Date</th><th>Mode</th><th class="r">Montant</th></tr></thead><tbody>${pays}</tbody></table>`
+          : ""
+      }
+      </body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  }
+
   return (
     <Dialog
       open={open}
@@ -283,6 +351,11 @@ function PurchaseDetailDialog({ purchase }: { purchase: PurchaseRow }) {
                 </Table>
               )}
             </div>
+
+            <Button variant="outline" className="self-end" onClick={printPurchase}>
+              <Printer className="h-4 w-4" />
+              Imprimer le bon d&apos;achat
+            </Button>
           </div>
         )}
       </DialogContent>
@@ -311,6 +384,8 @@ export default function PurchasesPage() {
   const [newSupplier, setNewSupplier] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [filterSupplier, setFilterSupplier] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
 
   useEffect(() => {
     if (loading) return;
@@ -344,10 +419,10 @@ export default function PurchasesPage() {
     if (!profile) return;
     const { data } = await supabase
       .from("purchases")
-      .select("id, created_at, reference, total, paid, supplier:suppliers(name)")
+      .select("id, created_at, reference, total, paid, supplier_id, supplier:suppliers(name)")
       .eq("organization_id", profile.organization_id)
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(100);
     setPurchases((data as unknown as PurchaseRow[]) ?? []);
   }, [profile]);
 
@@ -458,6 +533,7 @@ export default function PurchasesPage() {
     setPaidNow("");
     setMsg({ text: "Achat enregistré — le stock a été mis à jour.", ok: true });
     void loadPurchases();
+    void loadBase();
   }
 
   if (loading || !session || !profile) {
@@ -470,6 +546,21 @@ export default function PurchasesPage() {
 
   const totalAchats = purchases.reduce((s, p) => s + Number(p.total), 0);
   const totalDu = purchases.reduce((s, p) => s + (Number(p.total) - Number(p.paid)), 0);
+
+  const filteredPurchases = purchases.filter((p) => {
+    if (filterSupplier && p.supplier_id !== filterSupplier) return false;
+    if (filterStatus !== "all") {
+      const rem = Number(p.total) - Number(p.paid);
+      const st = rem <= 0.01 ? "paid" : Number(p.paid) > 0 ? "partial" : "unpaid";
+      if (st !== filterStatus) return false;
+    }
+    return true;
+  });
+
+  const debts = suppliers
+    .filter((s) => Number(s.balance ?? 0) > 0)
+    .sort((a, b) => Number(b.balance ?? 0) - Number(a.balance ?? 0));
+  const totalDebt = debts.reduce((s, x) => s + Number(x.balance ?? 0), 0);
 
   return (
     <div className="min-h-screen bg-muted/30 p-4 sm:p-8">
@@ -734,13 +825,46 @@ export default function PurchasesPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Historique des achats</CardTitle>
-            <CardDescription>Suivi des paiements — payé / reste dû.</CardDescription>
+          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
+            <div>
+              <CardTitle>Historique des achats</CardTitle>
+              <CardDescription>Suivi des paiements — payé / reste dû.</CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Select
+                items={[{ value: "", label: "Tous les fournisseurs" }, ...suppliers.map((s) => ({ value: s.id, label: s.name }))]}
+                value={filterSupplier}
+                onValueChange={(v) => setFilterSupplier(v ?? "")}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Fournisseur" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Tous les fournisseurs</SelectItem>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select items={STATUS_FILTERS} value={filterStatus} onValueChange={(v) => v && setFilterStatus(v)}>
+                <SelectTrigger className="w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_FILTERS.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent>
-            {purchases.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucun achat enregistré.</p>
+            {filteredPurchases.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Aucun achat pour ce filtre.</p>
             ) : (
               <Table>
                 <TableHeader>
@@ -756,7 +880,7 @@ export default function PurchasesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {purchases.map((p) => {
+                  {filteredPurchases.map((p) => {
                     const remaining = Number(p.total) - Number(p.paid);
                     const paidFull = remaining <= 0.01;
                     return (
@@ -781,12 +905,69 @@ export default function PurchasesPage() {
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             <PurchaseDetailDialog purchase={p} />
-                            {!paidFull && <PayDialog purchase={p} onPaid={loadPurchases} />}
+                            {!paidFull && (
+                              <PayDialog
+                                purchase={p}
+                                onPaid={() => {
+                                  void loadPurchases();
+                                  void loadBase();
+                                }}
+                              />
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
                     );
                   })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
+            <div>
+              <CardTitle>Dettes fournisseurs</CardTitle>
+              <CardDescription>Montant restant à régler par fournisseur.</CardDescription>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Total dû</p>
+              <p className={"text-xl font-bold tabular-nums " + (totalDebt > 0 ? "text-amber-700" : "text-emerald-700")}>
+                {fmtMoney(totalDebt)} CFA
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {debts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Aucune dette — tout est réglé. 🎉</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fournisseur</TableHead>
+                    <TableHead className="text-right">Reste dû</TableHead>
+                    <TableHead className="text-right">Achats liés</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {debts.map((s) => (
+                    <TableRow key={s.id}>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold text-amber-700">
+                        {fmtMoney(s.balance ?? 0)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setFilterSupplier(s.id)}
+                        >
+                          Voir les achats
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             )}
