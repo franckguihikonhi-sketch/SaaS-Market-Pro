@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, Trash2 } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
 import { useSession, type Profile } from "@/lib/use-session";
@@ -219,6 +219,25 @@ export default function DashboardPage() {
       setColleagues(previous);
       setResetMsg({ text: error.message, ok: false });
     }
+  }
+
+  // Suppression DÉFINITIVE d'un membre (réservé à Franck en maintenance).
+  async function deleteMember(colleague: OrgProfile) {
+    if (
+      !window.confirm(
+        `Supprimer DÉFINITIVEMENT ${colleague.full_name} ?\n\n` +
+          "Son compte et son accès seront supprimés. Cette action est irréversible."
+      )
+    ) {
+      return;
+    }
+    const { error } = await supabase.rpc("delete_member", { p_user: colleague.id });
+    if (error) {
+      setResetMsg({ text: error.message, ok: false });
+      return;
+    }
+    setColleagues((cur) => cur.filter((c) => c.id !== colleague.id));
+    setResetMsg({ text: `${colleague.full_name} a été supprimé définitivement.`, ok: true });
   }
 
   async function handleSignOut() {
@@ -535,25 +554,36 @@ export default function DashboardPage() {
                       )}
                       {canSuspend && (
                         <TableCell>
-                          {colleague.suspended ? (
+                          <div className="flex flex-wrap gap-2">
+                            {colleague.suspended ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void toggleSuspend(colleague.id, false)}
+                              >
+                                <Sun className="h-3.5 w-3.5" />
+                                Réveiller
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void toggleSuspend(colleague.id, true)}
+                              >
+                                <Moon className="h-3.5 w-3.5" />
+                                Mettre en sommeil
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => void toggleSuspend(colleague.id, false)}
+                              className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => void deleteMember(colleague)}
                             >
-                              <Sun className="h-3.5 w-3.5" />
-                              Réveiller
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Supprimer
                             </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => void toggleSuspend(colleague.id, true)}
-                            >
-                              <Moon className="h-3.5 w-3.5" />
-                              Mettre en sommeil
-                            </Button>
-                          )}
+                          </div>
                         </TableCell>
                       )}
                     </TableRow>

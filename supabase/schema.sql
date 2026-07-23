@@ -589,6 +589,34 @@ language sql security definer set search_path = public as $$
 $$;
 grant execute on function platform_members() to authenticated;
 
+-- Suppression DÉFINITIVE d'un membre (super_admin). Supprime le compte
+-- d'authentification (cascade sur profiles) ; l'historique métier est conservé
+-- en détachant l'auteur.
+create or replace function delete_member(p_user uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_target_role user_role;
+begin
+  if my_role() <> 'super_admin' then
+    raise exception 'Réservé au propriétaire de la plateforme.';
+  end if;
+  if p_user = auth.uid() then
+    raise exception 'Vous ne pouvez pas vous supprimer vous-même.';
+  end if;
+  select role into v_target_role from profiles where id = p_user;
+  if v_target_role is null then
+    raise exception 'Membre introuvable.';
+  end if;
+  if v_target_role = 'super_admin' then
+    raise exception 'Impossible de supprimer un autre propriétaire de plateforme.';
+  end if;
+  update sales set author = null where author = p_user;
+  update stock_movements set author = null where author = p_user;
+  delete from auth.users where id = p_user;
+end;
+$$;
+grant execute on function delete_member(uuid) to authenticated;
+
 -- Réglage du nombre de postes d'une organisation (super_admin uniquement).
 create or replace function set_org_seats(p_org uuid, p_seats int)
 returns void language plpgsql security definer set search_path = public as $$
