@@ -9,6 +9,7 @@ export type Profile = {
   organization_id: string;
   full_name: string;
   role: string;
+  suspended?: boolean;
 };
 
 export function useSession() {
@@ -29,7 +30,7 @@ export function useSession() {
       }
       const { data } = await supabase
         .from("profiles")
-        .select("id, organization_id, full_name, role")
+        .select("id, organization_id, full_name, role, suspended")
         .eq("id", newSession.user.id)
         .single();
       if (!active) return;

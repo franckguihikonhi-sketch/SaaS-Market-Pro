@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Wrench } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Moon, Sun, Wrench } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,16 @@ type OrgRow = {
   max_seats: number;
 };
 
+type Member = {
+  id: string;
+  full_name: string;
+  email: string | null;
+  role: string;
+  organization_id: string;
+  organization_name: string;
+  suspended: boolean;
+};
+
 function fmtDate(d: string | null) {
   return d ? new Date(d).toLocaleString("fr-FR") : "—";
 }
@@ -60,6 +71,7 @@ export default function PlatformPage() {
     await enter(orgId);
   }
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   const isPlatformOwner = profile?.role === "super_admin";
@@ -72,8 +84,12 @@ export default function PlatformPage() {
 
   const loadOrgs = useCallback(async () => {
     if (!isPlatformOwner) return;
-    const { data } = await supabase.rpc("platform_overview");
-    setOrgs((data as OrgRow[]) ?? []);
+    const [{ data: o }, { data: m }] = await Promise.all([
+      supabase.rpc("platform_overview"),
+      supabase.rpc("platform_members"),
+    ]);
+    setOrgs((o as OrgRow[]) ?? []);
+    setMembers((m as Member[]) ?? []);
     setLoadingData(false);
   }, [isPlatformOwner]);
 
@@ -83,6 +99,11 @@ export default function PlatformPage() {
     const id = setInterval(() => void loadOrgs(), 30000);
     return () => clearInterval(id);
   }, [loadOrgs]);
+
+  async function toggleSuspend(userId: string, suspend: boolean) {
+    await supabase.rpc("set_user_suspended", { p_user: userId, p_suspended: suspend });
+    void loadOrgs();
+  }
 
   const orgName = useCallback(
     (id: string) => orgs.find((o) => o.organization_id === id)?.organization_name ?? "—",
@@ -221,6 +242,77 @@ export default function PlatformPage() {
                           <Wrench className="h-3.5 w-3.5" />
                           Ouvrir
                         </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Membres &amp; accès</CardTitle>
+            <CardDescription>
+              Mettez un utilisateur en sommeil pour suspendre son accès, puis réveillez-le à tout moment.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingData ? (
+              <p className="text-sm text-muted-foreground">Chargement…</p>
+            ) : members.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Aucun membre.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Entreprise</TableHead>
+                    <TableHead>Membre</TableHead>
+                    <TableHead>Rôle</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {members.map((m) => (
+                    <TableRow key={m.id} className={m.suspended ? "opacity-60" : undefined}>
+                      <TableCell className="font-medium">{m.organization_name}</TableCell>
+                      <TableCell>{m.full_name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {ROLE_LABELS[m.role] ?? m.role}
+                      </TableCell>
+                      <TableCell>
+                        {m.suspended ? (
+                          <Badge variant="secondary" className="gap-1 text-amber-700">
+                            <Moon className="h-3 w-3" /> En sommeil
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="gap-1 text-emerald-700">
+                            Actif
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {m.suspended ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void toggleSuspend(m.id, false)}
+                          >
+                            <Sun className="h-3.5 w-3.5" />
+                            Réveiller
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void toggleSuspend(m.id, true)}
+                          >
+                            <Moon className="h-3.5 w-3.5" />
+                            Mettre en sommeil
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

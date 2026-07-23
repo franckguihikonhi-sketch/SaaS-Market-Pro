@@ -58,6 +58,7 @@ create table profiles (
   full_name text not null,
   email text,
   last_seen timestamptz,
+  suspended boolean not null default false,
   role user_role not null default 'cashier',
   created_at timestamptz not null default now()
 );
@@ -75,13 +76,16 @@ create table admin_active_org (
 -- renvoie cette organisation (accès maintenance) ; sinon, sa propre organisation.
 create or replace function my_organization_id() returns uuid
 language sql stable security definer set search_path = public as $$
-  select coalesce(
-    (select a.organization_id
-       from admin_active_org a
-      where a.admin_id = auth.uid()
-        and (select role from profiles where id = auth.uid()) = 'super_admin'),
-    (select organization_id from profiles where id = auth.uid())
-  );
+  select case
+    when (select suspended from profiles where id = auth.uid()) then null
+    else coalesce(
+      (select a.organization_id
+         from admin_active_org a
+        where a.admin_id = auth.uid()
+          and (select role from profiles where id = auth.uid()) = 'super_admin'),
+      (select organization_id from profiles where id = auth.uid())
+    )
+  end;
 $$;
 -- Appelée en RPC par le frontend pour connaître l'organisation effective
 -- (indispensable au mode maintenance).
@@ -544,6 +548,46 @@ language sql stable security definer set search_path = public as $$
   where a.admin_id = auth.uid();
 $$;
 grant execute on function current_active_org() to authenticated;
+
+-- ─── Mise en sommeil d'un utilisateur (super_admin) ────────────────────────
+-- Un utilisateur en sommeil a suspended = true → my_organization_id() renvoie
+-- NULL pour lui, ce qui lui coupe tout accès aux données (RLS).
+create or replace function set_user_suspended(p_user uuid, p_suspended boolean)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if my_role() <> 'super_admin' then
+    raise exception 'Réservé au propriétaire de la plateforme.';
+  end if;
+  if p_user = auth.uid() then
+    raise exception 'Vous ne pouvez pas vous mettre vous-même en sommeil.';
+  end if;
+  update profiles set suspended = p_suspended where id = p_user;
+end;
+$$;
+grant execute on function set_user_suspended(uuid, boolean) to authenticated;
+
+-- Liste des membres de toutes les entreprises clientes, avec leur statut de
+-- sommeil (pour piloter la mise en sommeil depuis la console plateforme).
+create or replace function platform_members()
+returns table (
+  id uuid,
+  full_name text,
+  email text,
+  role user_role,
+  organization_id uuid,
+  organization_name text,
+  suspended boolean
+)
+language sql security definer set search_path = public as $$
+  select p.id, p.full_name, p.email, p.role, p.organization_id, o.name, p.suspended
+  from profiles p
+  join organizations o on o.id = p.organization_id
+  where my_role() = 'super_admin'
+    and p.organization_id <> (select organization_id from profiles where id = auth.uid())
+    and p.role <> 'super_admin'
+  order by o.name, p.full_name;
+$$;
+grant execute on function platform_members() to authenticated;
 
 -- Réglage du nombre de postes d'une organisation (super_admin uniquement).
 create or replace function set_org_seats(p_org uuid, p_seats int)
