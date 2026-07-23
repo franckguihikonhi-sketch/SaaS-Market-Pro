@@ -74,6 +74,7 @@ export default function ReportsPage() {
     if (loading) return;
     if (!session) router.push("/login");
     else if (profile?.role === "cashier") router.push("/pos");
+    else if (profile?.role === "warehouse_keeper") router.push("/stock");
   }, [loading, session, profile, router]);
 
   const load = useCallback(async () => {

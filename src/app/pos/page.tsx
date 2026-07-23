@@ -237,8 +237,10 @@ export default function PosPage() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!loading && !session) router.push("/login");
-  }, [loading, session, router]);
+    if (loading) return;
+    if (!session) router.push("/login");
+    else if (profile?.role === "warehouse_keeper") router.push("/stock");
+  }, [loading, session, profile, router]);
 
   const loadBase = useCallback(async () => {
     if (!profile) return;

@@ -34,6 +34,8 @@ const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
 
 // Une caissière ne voit que l'interface de vente.
 const CASHIER_LINKS = new Set(["/pos"]);
+// Un gestionnaire de stock ne voit que l'interface de stock.
+const WAREHOUSE_LINKS = new Set(["/stock"]);
 
 export function AppNav() {
   const pathname = usePathname();
@@ -57,6 +59,7 @@ export function AppNav() {
   const inMaintenance = Boolean(activeOrgId);
 
   const isCashier = profile?.role === "cashier";
+  const isWarehouse = profile?.role === "warehouse_keeper";
   const isPlatformOwner = profile?.role === "super_admin";
   // Le propriétaire de la plateforme ne gère pas de boutique : seule la console.
   // Mais en mode maintenance, il voit toute l'interface de l'entreprise ouverte.
@@ -66,7 +69,9 @@ export function AppNav() {
       : [{ href: "/platform", label: "Plateforme", icon: Globe }]
     : isCashier
       ? LINKS.filter((l) => CASHIER_LINKS.has(l.href))
-      : LINKS;
+      : isWarehouse
+        ? LINKS.filter((l) => WAREHOUSE_LINKS.has(l.href))
+        : LINKS;
 
   async function handleSignOut() {
     await supabase.auth.signOut();

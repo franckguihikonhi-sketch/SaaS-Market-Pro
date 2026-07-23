@@ -80,7 +80,13 @@ export default function SignupPage() {
     }
     if (signUpData.session) {
       void supabase.rpc("record_login");
-      router.push(inviteInfo?.role === "cashier" ? "/pos" : "/dashboard");
+      router.push(
+        inviteInfo?.role === "cashier"
+          ? "/pos"
+          : inviteInfo?.role === "warehouse_keeper"
+            ? "/stock"
+            : "/dashboard"
+      );
     } else {
       setCheckEmail(true);
     }

@@ -264,6 +264,55 @@ export default function StockPage() {
     void loadWarehouseData();
   }, [loadWarehouseData]);
 
+  // Stock EN TEMPS RÉEL : dès qu'une vente (ou tout mouvement) touche ce dépôt,
+  // la quantité se met à jour sous les yeux du gestionnaire, sans rafraîchir.
+  useEffect(() => {
+    if (!warehouseId) return;
+    const channel = supabase
+      .channel(`stock-live-${warehouseId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "stocks", filter: `warehouse_id=eq.${warehouseId}` },
+        (payload) => {
+          const row = payload.new as { id?: string; product_id?: string; quantity?: number | string };
+          if (!row?.id) return;
+          setStocks((prev) => {
+            const next = { id: row.id!, product_id: row.product_id!, quantity: Number(row.quantity) };
+            return prev.some((s) => s.id === next.id)
+              ? prev.map((s) => (s.id === next.id ? { ...s, quantity: next.quantity } : s))
+              : [...prev, next];
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "stock_movements",
+          filter: `warehouse_id=eq.${warehouseId}`,
+        },
+        (payload) => {
+          const m = payload.new as Record<string, unknown>;
+          const mv: Movement = {
+            id: String(m.id),
+            product_id: String(m.product_id),
+            type: String(m.type),
+            quantity: Number(m.quantity),
+            previous_qty: Number(m.previous_qty),
+            new_qty: Number(m.new_qty),
+            reason: String(m.reason ?? ""),
+            created_at: String(m.created_at),
+          };
+          setMovements((prev) => [mv, ...prev.filter((x) => x.id !== mv.id)].slice(0, 20));
+        }
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [warehouseId]);
+
   if (loading || !session || !profile) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/30 p-8">
@@ -295,8 +344,17 @@ export default function StockPage() {
         <Card>
           <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
             <div>
-              <CardTitle>Stock</CardTitle>
-              <CardDescription>Quantités et mouvements par dépôt</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                Stock
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                  </span>
+                  Temps réel
+                </span>
+              </CardTitle>
+              <CardDescription>Quantités et mouvements par dépôt — mises à jour en direct</CardDescription>
             </div>
             <div className="flex items-center gap-2">
               {warehouses.length > 0 && (

@@ -44,7 +44,13 @@ export default function LoginPage() {
       .single();
     setLoading(false);
     router.push(
-      prof?.role === "cashier" ? "/pos" : prof?.role === "super_admin" ? "/platform" : "/dashboard"
+      prof?.role === "cashier"
+        ? "/pos"
+        : prof?.role === "warehouse_keeper"
+          ? "/stock"
+          : prof?.role === "super_admin"
+            ? "/platform"
+            : "/dashboard"
     );
   }
 
