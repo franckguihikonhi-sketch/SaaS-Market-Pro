@@ -50,29 +50,30 @@
 
 :root {
   --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --foreground: oklch(0.18 0.02 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.18 0.02 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.18 0.02 260);
+  /* Couleur de marque : vert émeraude (cohérent avec le logo et les actions). */
+  --primary: oklch(0.596 0.126 163.2);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.968 0.006 247);
+  --secondary-foreground: oklch(0.28 0.02 260);
+  --muted: oklch(0.967 0.008 210);
+  --muted-foreground: oklch(0.52 0.02 257);
+  --accent: oklch(0.965 0.02 165);
+  --accent-foreground: oklch(0.3 0.06 163);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.92 0.006 250);
+  --input: oklch(0.92 0.006 250);
+  --ring: oklch(0.65 0.14 163);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  --radius: 0.8rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -122,10 +123,15 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background:
+      radial-gradient(1100px 560px at 100% -10%, oklch(0.93 0.045 165 / 0.55), transparent 60%),
+      radial-gradient(950px 520px at -10% 110%, oklch(0.93 0.03 250 / 0.5), transparent 55%),
+      var(--background);
+    background-attachment: fixed;
   }
   html {
-    @apply font-sans;
+    @apply font-sans antialiased;
   }
 }
 

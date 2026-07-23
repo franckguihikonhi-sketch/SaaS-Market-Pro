@@ -86,7 +86,7 @@ export function AppNav() {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="sticky top-2 z-30 flex flex-col gap-2">
       {inMaintenance && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900 shadow-sm">
           <span className="flex items-center gap-2 text-sm font-semibold">
@@ -106,7 +106,7 @@ export function AppNav() {
           </button>
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1 shadow-sm">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border border-white/60 bg-white/80 px-2.5 py-1.5 shadow-lg shadow-slate-900/5 ring-1 ring-slate-900/5 backdrop-blur-xl">
       <Link href="/pos" className="flex items-center gap-2 pr-2">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
           <ShoppingCart className="h-3.5 w-3.5" />
@@ -122,10 +122,10 @@ export function AppNav() {
               key={link.href}
               href={link.href}
               className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                "flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-medium transition-all",
                 active
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  ? "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-sm shadow-emerald-600/30"
+                  : "text-slate-600 hover:bg-slate-900/5 hover:text-slate-900"
               )}
             >
               <Icon className="h-4 w-4" />
