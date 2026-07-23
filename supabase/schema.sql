@@ -83,6 +83,9 @@ language sql stable security definer set search_path = public as $$
     (select organization_id from profiles where id = auth.uid())
   );
 $$;
+-- Appelée en RPC par le frontend pour connaître l'organisation effective
+-- (indispensable au mode maintenance).
+grant execute on function my_organization_id() to authenticated;
 
 create or replace function my_role() returns user_role
 language sql stable security definer set search_path = public as $$

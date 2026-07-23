@@ -33,7 +33,16 @@ export function useSession() {
         .eq("id", newSession.user.id)
         .single();
       if (!active) return;
-      setProfile(data as Profile | null);
+      let prof = data as Profile | null;
+      if (prof) {
+        // Organisation EFFECTIVE : en mode maintenance, un super_admin agit au
+        // nom d'une autre entreprise. my_organization_id() (source des règles
+        // RLS) renvoie alors cette entreprise ; on aligne le profil dessus pour
+        // que tous les écrans filtrent la bonne organisation.
+        const { data: effOrg } = await supabase.rpc("my_organization_id");
+        if (effOrg) prof = { ...prof, organization_id: effOrg as string };
+      }
+      setProfile(prof);
       setLoading(false);
     }
 

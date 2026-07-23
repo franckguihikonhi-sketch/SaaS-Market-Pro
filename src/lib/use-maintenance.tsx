@@ -4,13 +4,16 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { supabase } from "@/lib/supabase";
 import { useSession } from "@/lib/use-session";
 
+// Doit correspondre à basePath dans next.config (export statique GitHub Pages).
+const BASE_PATH = "/SaaS-Market-Pro";
+
 type MaintenanceState = {
   // Organisation actuellement ouverte en maintenance par le super_admin,
   // ou null s'il travaille sur sa propre plateforme.
   activeOrgId: string | null;
   activeOrgName: string | null;
   ready: boolean;
-  enter: (orgId: string, orgName: string) => Promise<void>;
+  enter: (orgId: string) => Promise<void>;
   exit: () => Promise<void>;
 };
 
@@ -62,16 +65,16 @@ export function MaintenanceProvider({ children }: { children: React.ReactNode })
     };
   }, [profile, isPlatformOwner]);
 
-  const enter = useCallback(async (orgId: string, orgName: string) => {
+  // On recharge complètement la page en changeant de contexte : chaque écran
+  // relit alors l'organisation effective (my_organization_id) via useSession.
+  const enter = useCallback(async (orgId: string) => {
     await supabase.rpc("set_active_org", { p_org: orgId });
-    setActiveOrgId(orgId);
-    setActiveOrgName(orgName);
+    window.location.assign(`${BASE_PATH}/dashboard/`);
   }, []);
 
   const exit = useCallback(async () => {
     await supabase.rpc("clear_active_org");
-    setActiveOrgId(null);
-    setActiveOrgName(null);
+    window.location.assign(`${BASE_PATH}/platform/`);
   }, []);
 
   return (

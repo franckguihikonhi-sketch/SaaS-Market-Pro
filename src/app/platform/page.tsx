@@ -55,9 +55,9 @@ export default function PlatformPage() {
   // Présence : on ignore le super_admin (le propriétaire n'est pas un agent client).
   const online = useOnlineMembers().filter((m) => m.role !== "super_admin");
 
-  async function openMaintenance(orgId: string, orgName: string) {
-    await enter(orgId, orgName);
-    router.push("/dashboard");
+  async function openMaintenance(orgId: string) {
+    // enter() recharge la page sur le tableau de bord de l'entreprise ouverte.
+    await enter(orgId);
   }
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -216,9 +216,7 @@ export default function PlatformPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() =>
-                            void openMaintenance(o.organization_id, o.organization_name)
-                          }
+                          onClick={() => void openMaintenance(o.organization_id)}
                         >
                           <Wrench className="h-3.5 w-3.5" />
                           Ouvrir

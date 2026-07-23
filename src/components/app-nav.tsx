@@ -79,8 +79,8 @@ export function AppNav() {
   }
 
   async function handleExitMaintenance() {
+    // exit() recharge la page sur la console plateforme.
     await exit();
-    router.push("/platform");
   }
 
   return (
