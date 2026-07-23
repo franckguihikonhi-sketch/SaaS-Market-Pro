@@ -168,6 +168,128 @@ function PayDialog({
   );
 }
 
+function methodLabel(m: string) {
+  return PAYMENT_METHODS.find((x) => x.value === m)?.label ?? m;
+}
+
+function PurchaseDetailDialog({ purchase }: { purchase: PurchaseRow }) {
+  const [open, setOpen] = useState(false);
+  const [lines, setLines] = useState<{ id: string; label: string; quantity: number; unit_price: number; line_total: number }[]>([]);
+  const [payments, setPayments] = useState<{ id: string; amount: number; method: string; paid_at: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const remaining = Number(purchase.total) - Number(purchase.paid);
+
+  async function load() {
+    setLoading(true);
+    const [{ data: l }, { data: p }] = await Promise.all([
+      supabase.from("purchase_lines").select("id, label, quantity, unit_price, line_total").eq("purchase_id", purchase.id),
+      supabase
+        .from("purchase_payments")
+        .select("id, amount, method, paid_at")
+        .eq("purchase_id", purchase.id)
+        .order("paid_at", { ascending: true }),
+    ]);
+    setLines((l as typeof lines) ?? []);
+    setPayments((p as typeof payments) ?? []);
+    setLoading(false);
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (o) void load();
+      }}
+    >
+      <DialogTrigger render={<Button size="sm" variant="ghost" />}>Détails</DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Achat — {purchase.supplier?.name ?? "Sans fournisseur"}</DialogTitle>
+          <DialogDescription>
+            {new Date(purchase.created_at).toLocaleString("fr-FR")}
+            {purchase.reference ? ` · Réf. ${purchase.reference}` : ""}
+          </DialogDescription>
+        </DialogHeader>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Chargement…</p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div>
+              <p className="mb-1 text-xs font-medium uppercase text-muted-foreground">Articles</p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Article</TableHead>
+                    <TableHead className="text-right">Qté</TableHead>
+                    <TableHead className="text-right">P.U.</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lines.map((l) => (
+                    <TableRow key={l.id}>
+                      <TableCell>{l.label}</TableCell>
+                      <TableCell className="text-right tabular-nums">{Number(l.quantity)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmtMoney(l.unit_price)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmtMoney(l.line_total)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex flex-col gap-1 rounded-lg bg-slate-50 p-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total achat</span>
+                <span className="font-semibold tabular-nums">{fmtMoney(purchase.total)} CFA</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Payé</span>
+                <span className="font-semibold tabular-nums text-emerald-700">{fmtMoney(purchase.paid)} CFA</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Reste dû</span>
+                <span className={"font-semibold tabular-nums " + (remaining > 0.01 ? "text-amber-700" : "text-emerald-700")}>
+                  {fmtMoney(remaining)} CFA
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-xs font-medium uppercase text-muted-foreground">Règlements</p>
+              {payments.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aucun règlement pour l&apos;instant.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Mode</TableHead>
+                      <TableHead className="text-right">Montant</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {payments.map((pay) => (
+                      <TableRow key={pay.id}>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(pay.paid_at).toLocaleDateString("fr-FR")}
+                        </TableCell>
+                        <TableCell>{methodLabel(pay.method)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{fmtMoney(pay.amount)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function PurchasesPage() {
   const router = useRouter();
   const { session, profile, loading } = useSession();
@@ -346,6 +468,9 @@ export default function PurchasesPage() {
     );
   }
 
+  const totalAchats = purchases.reduce((s, p) => s + Number(p.total), 0);
+  const totalDu = purchases.reduce((s, p) => s + (Number(p.total) - Number(p.paid)), 0);
+
   return (
     <div className="min-h-screen bg-muted/30 p-4 sm:p-8">
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -359,6 +484,33 @@ export default function PurchasesPage() {
           <p className="text-sm text-muted-foreground">
             Enregistrez vos entrées d&apos;articles avec le fournisseur, le détail et le suivi des paiements.
           </p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Achats</CardDescription>
+              <CardTitle className="text-lg sm:text-2xl">{purchases.length}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Total achats</CardDescription>
+              <CardTitle className="text-lg tabular-nums sm:text-2xl">{fmtMoney(totalAchats)}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card className={totalDu > 0 ? "border-amber-300" : undefined}>
+            <CardHeader className="pb-2">
+              <CardDescription>Reste dû (fournisseurs)</CardDescription>
+              <CardTitle
+                className={
+                  "text-lg tabular-nums sm:text-2xl " + (totalDu > 0 ? "text-amber-700" : "text-emerald-700")
+                }
+              >
+                {fmtMoney(totalDu)}
+              </CardTitle>
+            </CardHeader>
+          </Card>
         </div>
 
         <Card>
@@ -448,7 +600,7 @@ export default function PurchasesPage() {
               <Label>Articles achetés</Label>
               <div className="flex flex-col gap-2">
                 {lines.map((line) => (
-                  <div key={line.key} className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 p-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] sm:items-end">
+                  <div key={line.key} className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 p-2 sm:grid-cols-[2fr_1fr_0.9fr_1fr_1fr_auto] sm:items-end">
                     <div className="flex flex-col gap-1">
                       <span className="text-xs text-muted-foreground">Article</span>
                       <Select
@@ -506,6 +658,12 @@ export default function PurchasesPage() {
                         value={line.unitPrice}
                         onChange={(e) => updateLine(line.key, { unitPrice: e.target.value })}
                       />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Total ligne</span>
+                      <div className="flex h-8 items-center justify-end rounded-md bg-slate-50 px-2 text-sm font-semibold tabular-nums">
+                        {fmtMoney((Number(line.quantity) || 0) * (Number(line.unitPrice) || 0))}
+                      </div>
                     </div>
                     <Button
                       type="button"
@@ -621,7 +779,10 @@ export default function PurchasesPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          {!paidFull && <PayDialog purchase={p} onPaid={loadPurchases} />}
+                          <div className="flex justify-end gap-1">
+                            <PurchaseDetailDialog purchase={p} />
+                            {!paidFull && <PayDialog purchase={p} onPaid={loadPurchases} />}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
