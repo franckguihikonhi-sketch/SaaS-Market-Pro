@@ -18,11 +18,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Wrench } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/use-session";
 import { useOnlineMembers } from "@/lib/use-presence";
+import { useMaintenance } from "@/lib/use-maintenance";
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super administrateur",
@@ -48,8 +51,14 @@ function fmtDate(d: string | null) {
 export default function PlatformPage() {
   const router = useRouter();
   const { session, profile, loading } = useSession();
+  const { enter } = useMaintenance();
   // Présence : on ignore le super_admin (le propriétaire n'est pas un agent client).
   const online = useOnlineMembers().filter((m) => m.role !== "super_admin");
+
+  async function openMaintenance(orgId: string, orgName: string) {
+    await enter(orgId, orgName);
+    router.push("/dashboard");
+  }
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -164,6 +173,7 @@ export default function PlatformPage() {
                     <TableHead className="text-right">Postes (utilisés / max)</TableHead>
                     <TableHead className="text-right">Connectés</TableHead>
                     <TableHead>Créée le</TableHead>
+                    <TableHead className="text-right">Maintenance</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -202,6 +212,18 @@ export default function PlatformPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">{fmtDate(o.created_at)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            void openMaintenance(o.organization_id, o.organization_name)
+                          }
+                        >
+                          <Wrench className="h-3.5 w-3.5" />
+                          Ouvrir
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

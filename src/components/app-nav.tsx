@@ -8,16 +8,19 @@ import {
   BookOpen,
   Boxes,
   Globe,
+  LogOut,
   Package,
   Power,
   ShoppingCart,
   Store,
   Users,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useSession } from "@/lib/use-session";
+import { useMaintenance } from "@/lib/use-maintenance";
 
 const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/pos", label: "Caisse", icon: ShoppingCart },
@@ -50,11 +53,17 @@ export function AppNav() {
     };
   }, []);
 
+  const { activeOrgId, activeOrgName, exit } = useMaintenance();
+  const inMaintenance = Boolean(activeOrgId);
+
   const isCashier = profile?.role === "cashier";
   const isPlatformOwner = profile?.role === "super_admin";
   // Le propriétaire de la plateforme ne gère pas de boutique : seule la console.
+  // Mais en mode maintenance, il voit toute l'interface de l'entreprise ouverte.
   const links = isPlatformOwner
-    ? [{ href: "/platform", label: "Plateforme", icon: Globe }]
+    ? inMaintenance
+      ? [...LINKS, { href: "/platform", label: "Plateforme", icon: Globe }]
+      : [{ href: "/platform", label: "Plateforme", icon: Globe }]
     : isCashier
       ? LINKS.filter((l) => CASHIER_LINKS.has(l.href))
       : LINKS;
@@ -64,8 +73,33 @@ export function AppNav() {
     router.push("/login");
   }
 
+  async function handleExitMaintenance() {
+    await exit();
+    router.push("/platform");
+  }
+
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1 shadow-sm">
+    <div className="flex flex-col gap-2">
+      {inMaintenance && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900 shadow-sm">
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            <Wrench className="h-4 w-4" />
+            Mode maintenance — {activeOrgName}
+          </span>
+          <span className="hidden text-xs text-amber-700 sm:inline">
+            Vous agissez au nom de cette entreprise.
+          </span>
+          <button
+            type="button"
+            onClick={() => void handleExitMaintenance()}
+            className="ml-auto flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-amber-700"
+          >
+            <LogOut className="h-4 w-4" />
+            Quitter la maintenance
+          </button>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1 shadow-sm">
       <Link href="/pos" className="flex items-center gap-2 pr-2">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
           <ShoppingCart className="h-3.5 w-3.5" />
@@ -105,6 +139,7 @@ export function AppNav() {
       >
         <Power className="h-4 w-4" />
       </button>
+      </div>
     </div>
   );
 }

@@ -62,9 +62,26 @@ create table profiles (
   created_at timestamptz not null default now()
 );
 
+-- Organisation « active » d'un super_admin en mode maintenance (voir plus bas
+-- set_active_org / clear_active_org). Déclarée ici car my_organization_id()
+-- s'appuie dessus.
+create table admin_active_org (
+  admin_id uuid primary key references profiles on delete cascade,
+  organization_id uuid not null references organizations on delete cascade,
+  set_at timestamptz not null default now()
+);
+
+-- my_organization_id() : pour un super_admin ayant une organisation active,
+-- renvoie cette organisation (accès maintenance) ; sinon, sa propre organisation.
 create or replace function my_organization_id() returns uuid
 language sql stable security definer set search_path = public as $$
-  select organization_id from profiles where id = auth.uid();
+  select coalesce(
+    (select a.organization_id
+       from admin_active_org a
+      where a.admin_id = auth.uid()
+        and (select role from profiles where id = auth.uid()) = 'super_admin'),
+    (select organization_id from profiles where id = auth.uid())
+  );
 $$;
 
 create or replace function my_role() returns user_role
@@ -286,6 +303,12 @@ alter table stock_movements enable row level security;
 
 create policy "read own org" on organizations for select using (id = my_organization_id());
 create policy "read own profile" on profiles for select using (organization_id = my_organization_id());
+-- Chacun peut toujours lire son propre profil, même quand my_organization_id()
+-- pointe ailleurs (mode maintenance : org réelle du super_admin ≠ org ouverte).
+create policy "read self profile" on profiles for select using (id = auth.uid());
+
+alter table admin_active_org enable row level security;
+create policy "self active org" on admin_active_org for select using (admin_id = auth.uid());
 
 create policy "org read" on stores for select using (organization_id = my_organization_id());
 create policy "org read" on warehouses for select using (organization_id = my_organization_id());
@@ -472,11 +495,52 @@ language sql security definer set search_path = public as $$
     max(p.last_seen) as last_activity
   from organizations o
   left join profiles p on p.organization_id = o.id
-  where my_role() = 'super_admin' and o.id <> my_organization_id()
+  where (select role from profiles where id = auth.uid()) = 'super_admin'
+    and o.id <> (select organization_id from profiles where id = auth.uid())
   group by o.id, o.name, o.created_at, o.max_seats
   order by o.name;
 $$;
 grant execute on function platform_overview() to authenticated;
+
+-- ─── Accès maintenance : le super_admin « entre » dans une entreprise ──────
+-- Ouvre une organisation en maintenance : my_organization_id() renverra
+-- désormais cette organisation pour l'appelant (super_admin uniquement).
+create or replace function set_active_org(p_org uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if my_role() <> 'super_admin' then
+    raise exception 'Réservé au propriétaire de la plateforme.';
+  end if;
+  if not exists (select 1 from organizations where id = p_org) then
+    raise exception 'Organisation introuvable.';
+  end if;
+  insert into admin_active_org (admin_id, organization_id)
+  values (auth.uid(), p_org)
+  on conflict (admin_id) do update
+    set organization_id = excluded.organization_id, set_at = now();
+end;
+$$;
+grant execute on function set_active_org(uuid) to authenticated;
+
+-- Quitte le mode maintenance.
+create or replace function clear_active_org()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  delete from admin_active_org where admin_id = auth.uid();
+end;
+$$;
+grant execute on function clear_active_org() to authenticated;
+
+-- Organisation active de l'appelant (pour le bandeau de maintenance).
+create or replace function current_active_org()
+returns table (organization_id uuid, organization_name text)
+language sql stable security definer set search_path = public as $$
+  select a.organization_id, o.name
+  from admin_active_org a
+  join organizations o on o.id = a.organization_id
+  where a.admin_id = auth.uid();
+$$;
+grant execute on function current_active_org() to authenticated;
 
 -- Réglage du nombre de postes d'une organisation (super_admin uniquement).
 create or replace function set_org_seats(p_org uuid, p_seats int)

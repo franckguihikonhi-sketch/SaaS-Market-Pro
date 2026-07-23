@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PresenceProvider } from "@/lib/use-presence";
+import { MaintenanceProvider } from "@/lib/use-maintenance";
 import { ChunkReloadGuard } from "@/components/chunk-reload-guard";
 
 const geistSans = Geist({
@@ -31,7 +32,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ChunkReloadGuard />
-        <PresenceProvider>{children}</PresenceProvider>
+        <MaintenanceProvider>
+          <PresenceProvider>{children}</PresenceProvider>
+        </MaintenanceProvider>
       </body>
     </html>
   );
