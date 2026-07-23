@@ -1000,11 +1000,14 @@ export default function PosPage() {
                           </td>
                         </tr>
                       ) : (
-                        ticket.map((l) => (
+                        ticket.map((l, i) => (
                           <tr
                             key={l.key}
                             onClick={() => selectLine(l)}
-                            className="cursor-pointer bg-blue-900 text-white"
+                            className={cn(
+                              "cursor-pointer text-white",
+                              i === ticket.length - 1 ? "bg-blue-600" : "bg-blue-900"
+                            )}
                           >
                             <td className="h-8 px-3 py-0 font-mono text-xs text-blue-200">{l.code}</td>
                             <td className="h-8 px-3 py-0 font-medium text-white">{l.label}</td>
@@ -1016,7 +1019,7 @@ export default function PosPage() {
                             <td className="h-8 px-3 py-0 text-right tabular-nums text-blue-100">
                               {l.discount ? `${l.discount}%` : "—"}
                             </td>
-                            <td className="h-8 px-3 py-0 text-right font-mono font-semibold tabular-nums text-white">
+                            <td className="h-8 bg-orange-200 px-3 py-0 text-right font-mono font-semibold tabular-nums text-orange-900">
                               {lineAmount(l).toFixed(2)}
                             </td>
                           </tr>
