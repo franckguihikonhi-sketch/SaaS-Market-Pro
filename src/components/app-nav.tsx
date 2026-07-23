@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   BarChart3,
   BookOpen,
   Boxes,
   Globe,
-  LogOut,
   Package,
+  Power,
   ShoppingCart,
   Store,
   Users,
@@ -36,6 +37,19 @@ export function AppNav() {
   const router = useRouter();
   const { profile } = useSession();
 
+  // Indicateur de connexion : vert quand en ligne, rouge dès la déconnexion réseau.
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine);
+    sync();
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
+
   const isCashier = profile?.role === "cashier";
   const isPlatformOwner = profile?.role === "super_admin";
   // Le propriétaire de la plateforme ne gère pas de boutique : seule la console.
@@ -51,10 +65,10 @@ export function AppNav() {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1 shadow-sm">
       <Link href="/pos" className="flex items-center gap-2 pr-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
-          <ShoppingCart className="h-4 w-4" />
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
+          <ShoppingCart className="h-3.5 w-3.5" />
         </span>
         <span className="text-sm font-bold tracking-tight text-slate-900">Market-Pro</span>
       </Link>
@@ -82,10 +96,14 @@ export function AppNav() {
       <button
         type="button"
         onClick={handleSignOut}
-        className="ml-auto flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+        title={online ? "Connecté — cliquer pour se déconnecter" : "Hors ligne"}
+        aria-label="Déconnexion"
+        className={cn(
+          "ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-white shadow-sm transition-colors",
+          online ? "bg-emerald-500 hover:bg-emerald-600" : "bg-red-500 hover:bg-red-600"
+        )}
       >
-        <LogOut className="h-4 w-4" />
-        <span className="hidden sm:inline">Déconnexion</span>
+        <Power className="h-4 w-4" />
       </button>
     </div>
   );
