@@ -42,7 +42,7 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Administrateur",
   manager: "Gérant",
   cashier: "Caissier(ère)",
-  warehouse_keeper: "Magasinier",
+  warehouse_keeper: "Gestionnaire de stock",
   accountant: "Comptable",
 };
 // Rôles qu'un admin peut attribuer via une invitation (pas super_admin).

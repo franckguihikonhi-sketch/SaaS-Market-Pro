@@ -32,7 +32,7 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Administrateur",
   manager: "Gérant",
   cashier: "Caissier(ère)",
-  warehouse_keeper: "Magasinier",
+  warehouse_keeper: "Gestionnaire de stock",
   accountant: "Comptable",
 };
 
