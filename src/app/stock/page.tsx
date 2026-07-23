@@ -36,6 +36,7 @@ import {
   DialogDescription,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { PackagePlus } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
 import { useSession } from "@/lib/use-session";
@@ -93,18 +94,37 @@ function RecordMovementDialog({
   warehouseId,
   products,
   onRecorded,
+  initialType = "purchase_receipt",
+  label = "Enregistrer un mouvement",
+  variant,
+  icon,
 }: {
   warehouseId: string;
   products: Product[];
   onRecorded: () => void;
+  initialType?: string;
+  label?: string;
+  variant?: "outline";
+  icon?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [productId, setProductId] = useState("");
-  const [type, setType] = useState("purchase_receipt");
+  const [type, setType] = useState(initialType);
   const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (next) {
+      setType(initialType);
+      setProductId("");
+      setQuantity("");
+      setReason("");
+      setError(null);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -135,8 +155,11 @@ function RecordMovementDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button />}>Enregistrer un mouvement</DialogTrigger>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger render={<Button variant={variant} />}>
+        {icon}
+        {label}
+      </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Mouvement de stock</DialogTitle>
@@ -376,7 +399,24 @@ export default function StockPage() {
                 </Select>
               )}
               {canWrite && warehouseId && products.length > 0 && (
-                <RecordMovementDialog warehouseId={warehouseId} products={products} onRecorded={loadWarehouseData} />
+                <>
+                  <RecordMovementDialog
+                    warehouseId={warehouseId}
+                    products={products}
+                    onRecorded={loadWarehouseData}
+                    initialType="purchase_receipt"
+                    label="Entrée d'article (Achat)"
+                    icon={<PackagePlus className="h-4 w-4" />}
+                  />
+                  <RecordMovementDialog
+                    warehouseId={warehouseId}
+                    products={products}
+                    onRecorded={loadWarehouseData}
+                    initialType="adjustment"
+                    label="Autre mouvement"
+                    variant="outline"
+                  />
+                </>
               )}
             </div>
           </CardHeader>
