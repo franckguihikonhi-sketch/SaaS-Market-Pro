@@ -18,7 +18,11 @@ export function ChunkReloadGuard() {
       if (!looksLikeChunkError(msg)) return;
       if (sessionStorage.getItem(KEY)) return; // évite une boucle de rechargement
       sessionStorage.setItem(KEY, "1");
-      window.location.reload();
+      // Recharge en CONTOURNANT le cache (un paramètre unique force le
+      // navigateur à récupérer un index.html frais, donc les bons fichiers JS).
+      const url = new URL(window.location.href);
+      url.searchParams.set("_r", Date.now().toString());
+      window.location.replace(url.toString());
     };
 
     const onError = (e: ErrorEvent) => handle(e?.message ?? "");
