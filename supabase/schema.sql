@@ -613,6 +613,31 @@ end;
 $$;
 grant execute on function set_org_seats(uuid, int) to authenticated;
 
+-- Suppression complète d'une entreprise cliente (super_admin). Cascade sur
+-- toutes ses données + suppression des comptes d'authentification.
+create or replace function delete_organization(p_org uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_user_ids uuid[];
+begin
+  if my_role() <> 'super_admin' then
+    raise exception 'Réservé au propriétaire de la plateforme.';
+  end if;
+  if not exists (select 1 from organizations where id = p_org) then
+    raise exception 'Organisation introuvable.';
+  end if;
+  if p_org = (select organization_id from profiles where id = auth.uid()) then
+    raise exception 'Vous ne pouvez pas supprimer votre propre organisation.';
+  end if;
+  select array_agg(id) into v_user_ids from profiles where organization_id = p_org;
+  delete from organizations where id = p_org;
+  if v_user_ids is not null then
+    delete from auth.users where id = any(v_user_ids);
+  end if;
+end;
+$$;
+grant execute on function delete_organization(uuid) to authenticated;
+
 create or replace function platform_agents()
 returns table (
   organization_name text,

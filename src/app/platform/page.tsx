@@ -29,7 +29,7 @@ import {
   DialogDescription,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Building2, Plus, Users, Wifi, Wrench } from "lucide-react";
+import { Building2, Plus, Trash2, Users, Wifi, Wrench } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -182,6 +182,24 @@ export default function PlatformPage() {
     // enter() recharge la page sur le tableau de bord de l'entreprise ouverte.
     await enter(orgId);
   }
+
+  async function deleteOrg(orgId: string, orgName: string) {
+    if (
+      !window.confirm(
+        `Supprimer DÉFINITIVEMENT l'entreprise « ${orgName} » ?\n\n` +
+          "Tous ses comptes et toutes ses données (ventes, achats, stock, articles, magasins…) " +
+          "seront effacés. Cette action est IRRÉVERSIBLE."
+      )
+    ) {
+      return;
+    }
+    const { error } = await supabase.rpc("delete_organization", { p_org: orgId });
+    if (error) {
+      window.alert(error.message);
+      return;
+    }
+    void loadOrgs();
+  }
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -201,7 +219,6 @@ export default function PlatformPage() {
   }, [isPlatformOwner]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     void loadOrgs();
     const id = setInterval(() => void loadOrgs(), 30000);
     return () => clearInterval(id);
@@ -291,7 +308,7 @@ export default function PlatformPage() {
                     <TableHead className="text-right">Postes (utilisés / max)</TableHead>
                     <TableHead className="text-right">Connectés</TableHead>
                     <TableHead>Créée le</TableHead>
-                    <TableHead className="text-right">Maintenance</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -331,14 +348,25 @@ export default function PlatformPage() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">{fmtDate(o.created_at)}</TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void openMaintenance(o.organization_id)}
-                        >
-                          <Wrench className="h-3.5 w-3.5" />
-                          Ouvrir
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void openMaintenance(o.organization_id)}
+                          >
+                            <Wrench className="h-3.5 w-3.5" />
+                            Ouvrir
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => void deleteOrg(o.organization_id, o.organization_name)}
+                            aria-label="Supprimer l'entreprise"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
