@@ -903,8 +903,9 @@ export default function ProductsPage() {
   useEffect(() => {
     if (loading) return;
     if (!session) router.push("/login");
-    else if (profile?.role === "cashier") router.push("/pos");
-    else if (profile?.role === "warehouse_keeper") router.push("/stock");
+    // Articles réservés au super_admin, à l'admin et au gestionnaire de stock.
+    else if (profile && !["super_admin", "admin", "warehouse_keeper"].includes(profile.role))
+      router.push(profile.role === "cashier" ? "/pos" : "/dashboard");
   }, [loading, session, profile, router]);
 
   const load = useCallback(async () => {
@@ -942,7 +943,7 @@ export default function ProductsPage() {
     );
   }
 
-  const canWrite = ["admin", "manager", "super_admin"].includes(profile.role);
+  const canWrite = ["super_admin", "admin", "warehouse_keeper"].includes(profile.role);
   const hasUnits = units.length > 0;
 
   return (

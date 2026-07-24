@@ -36,8 +36,10 @@ const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
 
 // Une caissière ne voit que l'interface de vente.
 const CASHIER_LINKS = new Set(["/pos"]);
-// Un gestionnaire de stock voit le stock et les achats (son métier).
-const WAREHOUSE_LINKS = new Set(["/stock", "/purchases"]);
+// Un gestionnaire de stock : stock, achats et articles (son métier).
+const WAREHOUSE_LINKS = new Set(["/stock", "/purchases", "/products"]);
+// Stock & Articles : réservés au super_admin, à l'admin et au gestionnaire de stock.
+const STOCK_LINKS = new Set(["/stock", "/products"]);
 
 export function AppNav() {
   const pathname = usePathname();
@@ -73,7 +75,10 @@ export function AppNav() {
       ? LINKS.filter((l) => CASHIER_LINKS.has(l.href))
       : isWarehouse
         ? LINKS.filter((l) => WAREHOUSE_LINKS.has(l.href))
-        : LINKS;
+        : profile?.role === "admin"
+          ? LINKS
+          : // Gérant / comptable : pas d'accès au Stock ni aux Articles.
+            LINKS.filter((l) => !STOCK_LINKS.has(l.href));
 
   async function handleSignOut() {
     await supabase.auth.signOut();
