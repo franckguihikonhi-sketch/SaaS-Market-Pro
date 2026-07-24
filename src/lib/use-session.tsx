@@ -60,8 +60,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         const activeOrg = window.localStorage.getItem("mp_active_org");
         if (activeOrg) prof = { ...prof, organization_id: activeOrg };
       }
-      // Nom de l'organisation (affiché dans la barre de navigation).
-      if (prof) {
+      // Nom de l'organisation (affiché dans la barre). Le super_admin n'a pas
+      // d'organisation : on ne fait la requête que s'il y en a une.
+      if (prof && prof.organization_id) {
         const { data: org } = await supabase
           .from("organizations")
           .select("name")

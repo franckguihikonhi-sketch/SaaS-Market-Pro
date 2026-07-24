@@ -53,7 +53,9 @@ create table organizations (
 -- Profil applicatif lié à Supabase Auth : id = auth.users.id.
 create table profiles (
   id uuid primary key references auth.users on delete cascade,
-  organization_id uuid not null references organizations on delete cascade,
+  -- Optionnel : le super_admin (propriétaire de la plateforme) n'appartient à
+  -- aucune organisation. Les membres d'entreprise en ont toujours une.
+  organization_id uuid references organizations on delete cascade,
   store_id uuid,
   full_name text not null,
   email text,
@@ -484,7 +486,7 @@ language sql security definer set search_path = public as $$
   from organizations o
   left join profiles p on p.organization_id = o.id
   where (select role from profiles where id = auth.uid()) = 'super_admin'
-    and o.id <> (select organization_id from profiles where id = auth.uid())
+    and o.id is distinct from (select organization_id from profiles where id = auth.uid())
   group by o.id, o.name, o.created_at, o.max_seats
   order by o.name;
 $$;
@@ -564,7 +566,7 @@ language sql security definer set search_path = public as $$
   from profiles p
   join organizations o on o.id = p.organization_id
   where my_role() = 'super_admin'
-    and p.organization_id <> (select organization_id from profiles where id = auth.uid())
+    and p.organization_id is distinct from (select organization_id from profiles where id = auth.uid())
     and p.role <> 'super_admin'
   order by o.name, p.full_name;
 $$;
