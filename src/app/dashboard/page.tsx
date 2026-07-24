@@ -253,9 +253,10 @@ export default function DashboardPage() {
     );
   }
 
-  // Le gérant est considéré comme un administrateur (mêmes droits de gestion).
-  const isAdmin =
-    profile.role === "admin" || profile.role === "manager" || profile.role === "super_admin";
+  // Administration de l'équipe (donner accès, inviter, rôles, mots de passe) :
+  // réservée au propriétaire de la plateforme, qui gère les accès des
+  // organisations en mode maintenance.
+  const canManageTeam = profile.role === "super_admin";
   // Seul Franck (super_admin), en maintenance sur une entreprise, peut mettre
   // ses membres en sommeil / les réveiller.
   const canSuspend = profile.role === "super_admin" && Boolean(activeOrgId);
@@ -279,7 +280,7 @@ export default function DashboardPage() {
           </Button>
         </div>
 
-        {isAdmin && (
+        {canManageTeam && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -321,7 +322,7 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {isAdmin && resetRequests.length > 0 && (
+        {canManageTeam && resetRequests.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Demandes de réinitialisation</CardTitle>
@@ -374,7 +375,7 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {isAdmin && (
+        {canManageTeam && (
           <Card>
             <CardHeader>
               <CardTitle>Ajouter un membre</CardTitle>
@@ -472,7 +473,7 @@ export default function DashboardPage() {
             <CardTitle>Équipe</CardTitle>
             <CardDescription>
               Utilisateurs de votre organisation
-              {isAdmin ? " — modifiez leur rôle ci-dessous" : ""}
+              {canManageTeam ? " — modifiez leur rôle ci-dessous" : ""}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -495,9 +496,9 @@ export default function DashboardPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nom</TableHead>
-                    {isAdmin && <TableHead>Email</TableHead>}
+                    {canManageTeam && <TableHead>Email</TableHead>}
                     <TableHead>Rôle</TableHead>
-                    {isAdmin && <TableHead>Mot de passe</TableHead>}
+                    {canManageTeam && <TableHead>Mot de passe</TableHead>}
                     {canSuspend && <TableHead>Accès</TableHead>}
                   </TableRow>
                 </TableHeader>
@@ -517,11 +518,11 @@ export default function DashboardPage() {
                           </Badge>
                         )}
                       </TableCell>
-                      {isAdmin && (
+                      {canManageTeam && (
                         <TableCell className="text-muted-foreground">{colleague.email || "—"}</TableCell>
                       )}
                       <TableCell>
-                        {isAdmin && colleague.id !== profile.id ? (
+                        {canManageTeam && colleague.id !== profile.id ? (
                           <Select
                             items={ROLES.map((role) => ({ value: role, label: ROLE_LABELS[role] ?? role }))}
                             value={colleague.role}
@@ -542,7 +543,7 @@ export default function DashboardPage() {
                           <Badge variant="secondary">{ROLE_LABELS[colleague.role] ?? colleague.role}</Badge>
                         )}
                       </TableCell>
-                      {isAdmin && (
+                      {canManageTeam && (
                         <TableCell>
                           <Button
                             variant="outline"
@@ -596,7 +597,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {isAdmin && (
+        {canManageTeam && (
           <Card>
             <CardHeader>
               <CardTitle>Historique des connexions</CardTitle>

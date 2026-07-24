@@ -352,40 +352,24 @@ create policy "admin write" on products for all using (
   organization_id = my_organization_id() and my_role() in ('admin', 'manager', 'super_admin', 'warehouse_keeper')
 );
 
--- Un admin peut modifier le rôle des collègues de son organisation
--- (jamais le sien, pour éviter de se retirer ses propres droits par erreur).
+-- Gestion des équipes réservée au propriétaire de la plateforme (super_admin),
+-- qui agit sur chaque organisation via le mode maintenance.
 create policy "admin update profiles" on profiles for update using (
   organization_id = my_organization_id()
-  and my_role() in ('admin', 'manager', 'super_admin')
+  and my_role() = 'super_admin'
   and id <> auth.uid()
 );
 
--- Les admins / managers gèrent les invitations de leur organisation.
 create policy "org manage invitations" on invitations for all
-  using (
-    organization_id = my_organization_id()
-    and my_role() in ('admin', 'manager', 'super_admin')
-  )
-  with check (
-    organization_id = my_organization_id()
-    and my_role() in ('admin', 'manager', 'super_admin')
-  );
+  using (organization_id = my_organization_id() and my_role() = 'super_admin')
+  with check (organization_id = my_organization_id() and my_role() = 'super_admin');
 
 create policy "org manage reset requests" on password_reset_requests for all
-  using (
-    organization_id = my_organization_id()
-    and my_role() in ('admin', 'manager', 'super_admin')
-  )
-  with check (
-    organization_id = my_organization_id()
-    and my_role() in ('admin', 'manager', 'super_admin')
-  );
+  using (organization_id = my_organization_id() and my_role() = 'super_admin')
+  with check (organization_id = my_organization_id() and my_role() = 'super_admin');
 
 create policy "org read login events" on login_events for select
-  using (
-    organization_id = my_organization_id()
-    and my_role() in ('admin', 'manager', 'super_admin')
-  );
+  using (organization_id = my_organization_id() and my_role() = 'super_admin');
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- PHASE 2 : PROVISIONING AUTOMATIQUE À L'INSCRIPTION
@@ -405,8 +389,8 @@ declare
   v_code text;
   v_row invitations;
 begin
-  if v_org is null or v_role not in ('admin', 'manager', 'super_admin') then
-    raise exception 'Seul un administrateur peut inviter un membre.';
+  if v_org is null or v_role <> 'super_admin' then
+    raise exception 'Seul le propriétaire de la plateforme peut inviter un membre.';
   end if;
   if p_role = 'super_admin' then
     raise exception 'Rôle non autorisé pour une invitation.';
