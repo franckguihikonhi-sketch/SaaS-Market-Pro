@@ -112,11 +112,16 @@ export function AppNav() {
         </div>
       )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border border-white/60 bg-white/80 px-2.5 py-1.5 shadow-lg shadow-slate-900/5 ring-1 ring-slate-900/5 backdrop-blur-xl">
-      <Link href="/pos" className="flex items-center gap-2 pr-1">
+      <Link
+        href={isPlatformOwner && !inMaintenance ? "/platform" : "/pos"}
+        className="flex items-center gap-2 pr-1"
+      >
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
           <ShoppingCart className="h-4 w-4" />
         </span>
-        {profile?.organization_name ? (
+        {/* Le super_admin n'est pas rattaché à une entreprise : on n'affiche son
+            nom d'organisation que lorsqu'il ouvre une entreprise en maintenance. */}
+        {profile?.organization_name && !(isPlatformOwner && !inMaintenance) ? (
           <span className="flex flex-col leading-tight">
             <span className="max-w-[46vw] truncate text-sm font-bold tracking-tight text-slate-900 sm:max-w-[260px] sm:text-base">
               {profile.organization_name}
@@ -126,7 +131,16 @@ export function AppNav() {
             </span>
           </span>
         ) : (
-          <span className="text-sm font-bold tracking-tight text-slate-900">Market-Pro</span>
+          <span className="flex flex-col leading-tight">
+            <span className="text-sm font-bold tracking-tight text-slate-900 sm:text-base">
+              Market-Pro
+            </span>
+            {isPlatformOwner && (
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500">
+                Propriétaire
+              </span>
+            )}
+          </span>
         )}
       </Link>
       <nav className="flex flex-wrap items-center gap-1">
