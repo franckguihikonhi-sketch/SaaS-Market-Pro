@@ -112,22 +112,23 @@ export function AppNav() {
         </div>
       )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border border-white/60 bg-white/80 px-2.5 py-1.5 shadow-lg shadow-slate-900/5 ring-1 ring-slate-900/5 backdrop-blur-xl">
-      <div className="flex items-center gap-2 pr-1">
-        <Link href="/pos" className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
-            <ShoppingCart className="h-3.5 w-3.5" />
-          </span>
-          <span className="text-sm font-bold tracking-tight text-slate-900">Market-Pro</span>
-        </Link>
-        {profile?.organization_name && (
-          <>
-            <span className="text-slate-300">·</span>
-            <span className="max-w-[38vw] truncate text-sm font-semibold text-emerald-700 sm:max-w-[220px]">
+      <Link href="/pos" className="flex items-center gap-2 pr-1">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
+          <ShoppingCart className="h-4 w-4" />
+        </span>
+        {profile?.organization_name ? (
+          <span className="flex flex-col leading-tight">
+            <span className="max-w-[46vw] truncate text-sm font-bold tracking-tight text-slate-900 sm:max-w-[260px] sm:text-base">
               {profile.organization_name}
             </span>
-          </>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Market-Pro
+            </span>
+          </span>
+        ) : (
+          <span className="text-sm font-bold tracking-tight text-slate-900">Market-Pro</span>
         )}
-      </div>
+      </Link>
       <nav className="flex flex-wrap items-center gap-1">
         {links.map((link) => {
           const active = pathname?.startsWith(link.href);
