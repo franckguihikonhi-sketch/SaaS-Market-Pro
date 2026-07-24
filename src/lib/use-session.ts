@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 export type Profile = {
   id: string;
   organization_id: string;
+  organization_name?: string;
   full_name: string;
   role: string;
   suspended?: boolean;
@@ -42,6 +43,16 @@ export function useSession() {
       if (prof && prof.role === "super_admin" && typeof window !== "undefined") {
         const activeOrg = window.localStorage.getItem("mp_active_org");
         if (activeOrg) prof = { ...prof, organization_id: activeOrg };
+      }
+      // Nom de l'organisation effective (affiché dans la barre de navigation).
+      if (prof) {
+        const { data: org } = await supabase
+          .from("organizations")
+          .select("name")
+          .eq("id", prof.organization_id)
+          .single();
+        if (!active) return;
+        prof = { ...prof, organization_name: (org as { name: string } | null)?.name };
       }
       setProfile(prof);
       setLoading(false);
