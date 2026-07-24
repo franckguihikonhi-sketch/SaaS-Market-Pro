@@ -18,10 +18,10 @@ export function useOnlineMembers() {
   return useContext(PresenceContext);
 }
 
-// Présence en temps réel via UN canal global partagé. Chaque utilisateur
-// connecté « track » sa présence (avec son organisation). Les écrans lisent
-// la liste via useOnlineMembers() : la page Équipe filtre sur sa propre
-// organisation, la console Plateforme voit tout le monde.
+// Présence en temps réel via un canal PAR ORGANISATION : un utilisateur ne
+// voit jamais la présence des autres entreprises (isolation multi-tenant).
+// En parallèle, un « heartbeat » met à jour last_seen côté base pour alimenter
+// la console Plateforme (comptage serveur, réservé au super_admin via RPC).
 export function PresenceProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useSession();
   const [online, setOnline] = useState<OnlineMember[]>([]);
@@ -29,7 +29,9 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!profile) return;
 
-    const channel = supabase.channel("presence-all", {
+    // Canal isolé : nom dérivé de l'organisation. Seuls les membres de la même
+    // organisation partagent ce canal.
+    const channel = supabase.channel(`presence-org-${profile.organization_id}`, {
       config: { presence: { key: profile.id } },
     });
 
@@ -56,7 +58,13 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    // Heartbeat serveur (pour la console Plateforme).
+    void supabase.rpc("touch_last_seen");
+    const heartbeat = setInterval(() => void supabase.rpc("touch_last_seen"), 40000);
+
     return () => {
+      clearInterval(heartbeat);
+      void supabase.rpc("go_offline");
       setOnline([]);
       void supabase.removeChannel(channel);
     };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -34,7 +34,6 @@ import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/use-session";
-import { useOnlineMembers } from "@/lib/use-presence";
 import { useMaintenance } from "@/lib/use-maintenance";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -52,6 +51,14 @@ type OrgRow = {
   created_at: string;
   user_count: number;
   max_seats: number;
+  active_count: number;
+};
+
+type Agent = {
+  organization_name: string;
+  full_name: string;
+  role: string;
+  last_seen: string;
 };
 
 function fmtDate(d: string | null) {
@@ -175,8 +182,6 @@ export default function PlatformPage() {
   const router = useRouter();
   const { session, profile, loading } = useSession();
   const { enter } = useMaintenance();
-  // Présence : on ignore le super_admin (le propriétaire n'est pas un agent client).
-  const online = useOnlineMembers().filter((m) => m.role !== "super_admin");
 
   async function openMaintenance(orgId: string) {
     // enter() recharge la page sur le tableau de bord de l'entreprise ouverte.
@@ -201,6 +206,7 @@ export default function PlatformPage() {
     void loadOrgs();
   }
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   const isPlatformOwner = profile?.role === "super_admin";
@@ -213,37 +219,28 @@ export default function PlatformPage() {
 
   const loadOrgs = useCallback(async () => {
     if (!isPlatformOwner) return;
-    const { data } = await supabase.rpc("platform_overview");
-    setOrgs((data as OrgRow[]) ?? []);
+    // Comptage « connectés » côté serveur (RPC réservée au super_admin) : aucune
+    // donnée de présence n'est exposée aux autres entreprises.
+    const [{ data: o }, { data: ag }] = await Promise.all([
+      supabase.rpc("platform_overview"),
+      supabase.rpc("platform_agents"),
+    ]);
+    setOrgs((o as OrgRow[]) ?? []);
+    setAgents(((ag as Agent[]) ?? []).filter((a) => a.role !== "super_admin"));
     setLoadingData(false);
   }, [isPlatformOwner]);
 
   useEffect(() => {
     void loadOrgs();
-    const id = setInterval(() => void loadOrgs(), 30000);
+    const id = setInterval(() => void loadOrgs(), 20000);
     return () => clearInterval(id);
   }, [loadOrgs]);
-
-  const orgName = useCallback(
-    (id: string) => orgs.find((o) => o.organization_id === id)?.organization_name ?? "—",
-    [orgs]
-  );
 
   async function saveSeats(orgId: string, seats: number) {
     if (!Number.isFinite(seats) || seats < 1) return;
     await supabase.rpc("set_org_seats", { p_org: orgId, p_seats: Math.round(seats) });
     void loadOrgs();
   }
-
-  const agents = useMemo(
-    () =>
-      [...online].sort(
-        (a, b) =>
-          orgName(a.organization_id).localeCompare(orgName(b.organization_id)) ||
-          a.full_name.localeCompare(b.full_name)
-      ),
-    [online, orgName]
-  );
 
   if (loading || !session || !profile || !isPlatformOwner) {
     return (
@@ -254,7 +251,6 @@ export default function PlatformPage() {
   }
 
   const totalUsers = orgs.reduce((s, o) => s + Number(o.user_count), 0);
-  const connectedFor = (orgId: string) => online.filter((m) => m.organization_id === orgId).length;
 
   return (
     <div className="min-h-screen bg-muted/30 p-4 sm:p-8">
@@ -279,7 +275,7 @@ export default function PlatformPage() {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                 </span>
-                {online.length}
+                {agents.length}
               </span>
             }
             tone="positive"
@@ -337,10 +333,10 @@ export default function PlatformPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {connectedFor(o.organization_id) > 0 ? (
+                        {Number(o.active_count) > 0 ? (
                           <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600">
                             <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                            {connectedFor(o.organization_id)}
+                            {o.active_count}
                           </span>
                         ) : (
                           <span className="text-muted-foreground">0</span>
@@ -401,16 +397,18 @@ export default function PlatformPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {agents.map((a) => (
-                    <TableRow key={a.id}>
-                      <TableCell className="font-medium">{orgName(a.organization_id)}</TableCell>
+                  {agents.map((a, i) => (
+                    <TableRow key={`${a.organization_name}-${a.full_name}-${i}`}>
+                      <TableCell className="font-medium">{a.organization_name}</TableCell>
                       <TableCell>{a.full_name}</TableCell>
                       <TableCell>{ROLE_LABELS[a.role] ?? a.role}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {new Date(a.online_at).toLocaleTimeString("fr-FR", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {a.last_seen
+                          ? new Date(a.last_seen).toLocaleTimeString("fr-FR", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : "—"}
                       </TableCell>
                     </TableRow>
                   ))}
