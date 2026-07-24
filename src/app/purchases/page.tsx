@@ -74,6 +74,19 @@ const STATUS_FILTERS = [
   { value: "paid", label: "Payé" },
 ];
 
+// Échappe le texte inséré dans le HTML d'impression (anti-XSS) : les libellés
+// d'articles, noms de fournisseurs et références proviennent des utilisateurs.
+function esc(s: unknown) {
+  const map: Record<string, string> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  };
+  return String(s ?? "").replace(/[&<>"']/g, (c) => map[c]);
+}
+
 // Formatage CFA avec séparateur de milliers.
 function fmtMoney(n: number) {
   return new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })
@@ -208,7 +221,7 @@ function PurchaseDetailDialog({ purchase }: { purchase: PurchaseRow }) {
     const rows = lines
       .map(
         (l) =>
-          `<tr><td>${l.label}</td><td class="r">${Number(l.quantity)}</td><td class="r">${fmtMoney(
+          `<tr><td>${esc(l.label)}</td><td class="r">${Number(l.quantity)}</td><td class="r">${fmtMoney(
             l.unit_price
           )}</td><td class="r">${fmtMoney(l.line_total)}</td></tr>`
       )
@@ -216,8 +229,8 @@ function PurchaseDetailDialog({ purchase }: { purchase: PurchaseRow }) {
     const pays = payments
       .map(
         (p) =>
-          `<tr><td>${new Date(p.paid_at).toLocaleDateString("fr-FR")}</td><td>${methodLabel(
-            p.method
+          `<tr><td>${new Date(p.paid_at).toLocaleDateString("fr-FR")}</td><td>${esc(
+            methodLabel(p.method)
           )}</td><td class="r">${fmtMoney(p.amount)}</td></tr>`
       )
       .join("");
@@ -239,9 +252,9 @@ function PurchaseDetailDialog({ purchase }: { purchase: PurchaseRow }) {
       </style></head><body>
       <h1>Bon d'achat</h1>
       <div class="muted">
-        Fournisseur : <strong>${purchase.supplier?.name ?? "—"}</strong><br>
+        Fournisseur : <strong>${esc(purchase.supplier?.name ?? "—")}</strong><br>
         Date : ${new Date(purchase.created_at).toLocaleString("fr-FR")}${
-      purchase.reference ? `<br>Référence : ${purchase.reference}` : ""
+      purchase.reference ? `<br>Référence : ${esc(purchase.reference)}` : ""
     }
       </div>
       <div class="sec">Articles</div>
