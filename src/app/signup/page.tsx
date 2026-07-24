@@ -22,7 +22,7 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Administrateur",
   manager: "Gérant",
   cashier: "Caissier(ère)",
-  warehouse_keeper: "Magasinier",
+  warehouse_keeper: "Gestionnaire de stock",
   accountant: "Comptable",
 };
 
@@ -30,7 +30,6 @@ type InviteInfo = { organization_name: string; role: string };
 
 export default function SignupPage() {
   const router = useRouter();
-  const [organizationName, setOrganizationName] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,18 +59,15 @@ export default function SignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (inviteCode.trim() && !inviteInfo) {
-      setError("Code d'invitation invalide ou déjà utilisé.");
+    if (!inviteCode.trim() || !inviteInfo) {
+      setError("Un code d'accès valide est requis. Demandez-le au propriétaire de la plateforme.");
       return;
     }
     setLoading(true);
-    const data = inviteInfo
-      ? { full_name: fullName, invite_code: inviteCode.trim() }
-      : { organization_name: organizationName, full_name: fullName };
     const { data: signUpData, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data },
+      options: { data: { full_name: fullName, invite_code: inviteCode.trim() } },
     });
     setLoading(false);
     if (error) {
@@ -81,9 +77,9 @@ export default function SignupPage() {
     if (signUpData.session) {
       void supabase.rpc("record_login");
       router.push(
-        inviteInfo?.role === "cashier"
+        inviteInfo.role === "cashier"
           ? "/pos"
-          : inviteInfo?.role === "warehouse_keeper"
+          : inviteInfo.role === "warehouse_keeper"
             ? "/stock"
             : "/dashboard"
       );
@@ -94,13 +90,13 @@ export default function SignupPage() {
 
   if (checkEmail) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-emerald-50/50 p-8">
-        <Card className="w-full max-w-sm shadow-lg">
+      <div className="flex min-h-screen items-center justify-center p-4 sm:p-8">
+        <Card className="w-full max-w-sm">
           <CardHeader>
             <CardTitle>Vérifiez vos emails</CardTitle>
             <CardDescription>
-              Un lien de confirmation a été envoyé à {email}. Cliquez dessus
-              pour activer votre compte, puis connectez-vous.
+              Un lien de confirmation a été envoyé à {email}. Cliquez dessus pour activer votre
+              compte, puis connectez-vous.
             </CardDescription>
           </CardHeader>
           <CardFooter>
@@ -114,40 +110,38 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-gradient-to-br from-slate-50 via-white to-emerald-50/50 p-8">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 p-4 sm:p-8">
       <Link href="/" className="flex items-center gap-2">
         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-600/20">
           <ShoppingCart className="h-5 w-5" />
         </span>
         <span className="text-xl font-bold tracking-tight text-slate-900">Market-Pro</span>
       </Link>
-      <Card className="w-full max-w-sm shadow-lg">
+      <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>{inviteInfo ? "Rejoindre une équipe" : "Créer votre organisation"}</CardTitle>
+          <CardTitle>Activer votre compte</CardTitle>
           <CardDescription>
-            {inviteInfo
-              ? "Créez votre compte pour rejoindre votre équipe."
-              : "Vous serez administrateur de votre espace Market-Pro"}
+            L&apos;inscription se fait avec le <strong>code d&apos;accès</strong> fourni par le
+            propriétaire de la plateforme.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="invite">Code d&apos;invitation (optionnel)</Label>
+              <Label htmlFor="invite">Code d&apos;accès</Label>
               <Input
                 id="invite"
+                required
                 value={inviteCode}
                 onChange={(e) => {
                   setInviteCode(e.target.value.toUpperCase());
                   setInviteChecked(false);
                 }}
                 onBlur={checkInvite}
-                placeholder="Reçu de votre employeur"
-                className="font-mono uppercase"
+                placeholder="Ex. 3F7A9C2B"
+                className="font-mono uppercase tracking-widest"
               />
-              {checkingInvite && (
-                <p className="text-xs text-muted-foreground">Vérification…</p>
-              )}
+              {checkingInvite && <p className="text-xs text-muted-foreground">Vérification…</p>}
               {inviteInfo && (
                 <p className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs font-medium text-emerald-700">
                   Vous rejoignez <strong>{inviteInfo.organization_name}</strong> en tant que{" "}
@@ -159,25 +153,9 @@ export default function SignupPage() {
               )}
             </div>
 
-            {!inviteInfo && (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="organization">Nom de l&apos;organisation</Label>
-                <Input
-                  id="organization"
-                  required={!inviteInfo}
-                  value={organizationName}
-                  onChange={(e) => setOrganizationName(e.target.value)}
-                />
-              </div>
-            )}
             <div className="flex flex-col gap-2">
               <Label htmlFor="fullName">Votre nom</Label>
-              <Input
-                id="fullName"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-              />
+              <Input id="fullName" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="email">Email</Label>
@@ -203,16 +181,8 @@ export default function SignupPage() {
             {error && <p className="text-sm text-destructive">{error}</p>}
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
-            <Button
-              type="submit"
-              className="w-full bg-emerald-600 hover:bg-emerald-700"
-              disabled={loading}
-            >
-              {loading
-                ? "Création…"
-                : inviteInfo
-                  ? "Rejoindre l'équipe"
-                  : "Créer mon organisation"}
+            <Button type="submit" className="w-full" disabled={loading || !inviteInfo}>
+              {loading ? "Activation…" : "Activer mon compte"}
             </Button>
             <p className="text-sm text-muted-foreground">
               Déjà un compte ?{" "}

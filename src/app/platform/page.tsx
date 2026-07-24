@@ -18,9 +18,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
-import { Building2, Users, Wifi, Wrench } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Building2, Plus, Users, Wifi, Wrench } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -47,6 +56,119 @@ type OrgRow = {
 
 function fmtDate(d: string | null) {
   return d ? new Date(d).toLocaleString("fr-FR") : "—";
+}
+
+// Création d'une entreprise cliente par le propriétaire de la plateforme :
+// nom + nombre de postes + code d'accès pour son premier administrateur.
+function NewOrgDialog({ onCreated }: { onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [seats, setSeats] = useState("3");
+  const [adminName, setAdminName] = useState("");
+  const [code, setCode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function reset() {
+    setName("");
+    setSeats("3");
+    setAdminName("");
+    setCode(null);
+    setError(null);
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    const { data, error } = await supabase.rpc("create_organization", {
+      p_name: name,
+      p_seats: Number(seats) || 3,
+      p_admin_name: adminName,
+    });
+    setBusy(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    const row = (data as { organization_id: string; invite_code: string }[] | null)?.[0];
+    setCode(row?.invite_code ?? null);
+    onCreated();
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (o) reset();
+      }}
+    >
+      <DialogTrigger render={<Button size="sm" />}>
+        <Plus className="h-4 w-4" />
+        Nouvelle entreprise
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nouvelle entreprise cliente</DialogTitle>
+          <DialogDescription>
+            Créez l&apos;entreprise et son nombre de postes. Un code d&apos;accès sera généré pour son
+            premier administrateur.
+          </DialogDescription>
+        </DialogHeader>
+
+        {code ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground">
+              Entreprise créée ✅ Communiquez ce <strong>code d&apos;accès</strong> à
+              l&apos;administrateur de <strong>{name}</strong> : il s&apos;inscrit sur la page
+              d&apos;inscription avec ce code.
+            </p>
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <span className="font-mono text-2xl font-bold tracking-widest text-emerald-800">{code}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void navigator.clipboard.writeText(code).catch(() => {})}
+              >
+                Copier
+              </Button>
+            </div>
+            <Button type="button" onClick={() => setOpen(false)}>
+              Terminé
+            </Button>
+          </div>
+        ) : (
+          <form onSubmit={submit} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="org-name">Nom de l&apos;entreprise</Label>
+              <Input id="org-name" required value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="org-seats">Nombre de postes</Label>
+              <Input
+                id="org-seats"
+                type="number"
+                min="1"
+                required
+                value={seats}
+                onChange={(e) => setSeats(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="org-admin">Nom de l&apos;administrateur (optionnel)</Label>
+              <Input id="org-admin" value={adminName} onChange={(e) => setAdminName(e.target.value)} />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" disabled={busy}>
+              {busy ? "Création…" : "Créer l'entreprise"}
+            </Button>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export default function PlatformPage() {
@@ -149,9 +271,12 @@ export default function PlatformPage() {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Entreprises</CardTitle>
-            <CardDescription>Chaque entreprise est totalement isolée des autres.</CardDescription>
+          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>Entreprises</CardTitle>
+              <CardDescription>Chaque entreprise est totalement isolée des autres.</CardDescription>
+            </div>
+            <NewOrgDialog onCreated={loadOrgs} />
           </CardHeader>
           <CardContent>
             {loadingData ? (
