@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SessionProvider } from "@/lib/use-session";
 import { PresenceProvider } from "@/lib/use-presence";
 import { MaintenanceProvider } from "@/lib/use-maintenance";
 import { AccountGuard } from "@/components/account-guard";
@@ -33,11 +34,13 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ChunkReloadGuard />
-        <MaintenanceProvider>
-          <AccountGuard>
-            <PresenceProvider>{children}</PresenceProvider>
-          </AccountGuard>
-        </MaintenanceProvider>
+        <SessionProvider>
+          <MaintenanceProvider>
+            <AccountGuard>
+              <PresenceProvider>{children}</PresenceProvider>
+            </AccountGuard>
+          </MaintenanceProvider>
+        </SessionProvider>
       </body>
     </html>
   );

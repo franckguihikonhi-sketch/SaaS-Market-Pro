@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
@@ -13,7 +13,25 @@ export type Profile = {
   suspended?: boolean;
 };
 
-export function useSession() {
+type SessionState = {
+  session: Session | null;
+  profile: Profile | null;
+  loading: boolean;
+  user: Session["user"] | null;
+};
+
+const SessionContext = createContext<SessionState>({
+  session: null,
+  profile: null,
+  loading: true,
+  user: null,
+});
+
+// Un SEUL point de vérité pour la session : les requêtes (profil + organisation
+// + écoute de l'authentification) sont exécutées une fois par le provider, puis
+// partagées par toute l'app via useSession(). Auparavant chaque composant
+// relançait ces requêtes → lenteur et risques de désynchronisation.
+export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,14 +55,12 @@ export function useSession() {
       if (!active) return;
       let prof = data as Profile | null;
       // Organisation EFFECTIVE : en mode maintenance, un super_admin agit au nom
-      // d'une autre entreprise. L'org active est mémorisée dans localStorage
-      // (synchronisée avec la base par MaintenanceProvider) : on aligne le
-      // profil dessus pour que tous les écrans filtrent la bonne organisation.
+      // d'une autre entreprise (mémorisée dans localStorage).
       if (prof && prof.role === "super_admin" && typeof window !== "undefined") {
         const activeOrg = window.localStorage.getItem("mp_active_org");
         if (activeOrg) prof = { ...prof, organization_id: activeOrg };
       }
-      // Nom de l'organisation effective (affiché dans la barre de navigation).
+      // Nom de l'organisation (affiché dans la barre de navigation).
       if (prof) {
         const { data: org } = await supabase
           .from("organizations")
@@ -70,5 +86,13 @@ export function useSession() {
     };
   }, []);
 
-  return { session, profile, loading, user: session?.user ?? null };
+  return (
+    <SessionContext.Provider value={{ session, profile, loading, user: session?.user ?? null }}>
+      {children}
+    </SessionContext.Provider>
+  );
+}
+
+export function useSession() {
+  return useContext(SessionContext);
 }
