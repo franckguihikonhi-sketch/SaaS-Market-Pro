@@ -421,25 +421,22 @@ grant execute on function invitation_info(text) to anon, authenticated;
 grant execute on function create_invitation(user_role, text) to authenticated;
 
 -- Demande de réinitialisation depuis la page « Mot de passe oublié ».
+-- Ne renvoie rien (anti-énumération) : dépose seulement, en interne, une
+-- demande pour les salariés.
 create or replace function request_password_reset(p_email text)
-returns text language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public as $$
 declare v_p profiles;
 begin
   select * into v_p from profiles where lower(email) = lower(trim(p_email)) limit 1;
-  if v_p.id is null then
-    return 'unknown';
-  end if;
-  if v_p.role in ('admin', 'super_admin') then
-    return 'self';
-  end if;
-  if not exists (
-    select 1 from password_reset_requests
-    where profile_id = v_p.id and resolved_at is null
-  ) then
+  if v_p.id is not null
+     and v_p.role not in ('admin', 'manager', 'super_admin')
+     and not exists (
+       select 1 from password_reset_requests
+       where profile_id = v_p.id and resolved_at is null
+     ) then
     insert into password_reset_requests (organization_id, profile_id, email, full_name)
     values (v_p.organization_id, v_p.id, v_p.email, v_p.full_name);
   end if;
-  return 'employee';
 end;
 $$;
 

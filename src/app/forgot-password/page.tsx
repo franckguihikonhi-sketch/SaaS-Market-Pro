@@ -25,19 +25,18 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
-    const { data: kind } = await supabase.rpc("request_password_reset", { p_email: email });
-    if (kind === "self") {
-      // Compte administrateur : réinitialisation en libre-service.
-      await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/SaaS-Market-Pro/reset-password/`,
-      });
-      setMessage("Un email de réinitialisation vous a été envoyé. Vérifiez votre boîte mail.");
-    } else {
-      // Salarié (ou email inconnu) : la demande est transmise à l'administrateur.
-      setMessage(
-        "Votre demande a été transmise à votre administrateur. Il réinitialisera votre mot de passe."
-      );
-    }
+    // On effectue TOUJOURS les deux actions, quel que soit l'email : dépôt d'une
+    // éventuelle demande (côté base, silencieux) + envoi d'un lien de
+    // réinitialisation (Supabase ne révèle jamais si l'email existe). Puis un
+    // message générique unique → aucune énumération d'email possible.
+    await supabase.rpc("request_password_reset", { p_email: email });
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/SaaS-Market-Pro/reset-password/`,
+    });
+    setMessage(
+      "Si un compte est associé à cet email, un lien de réinitialisation vient d'être envoyé. " +
+        "Si vous êtes salarié sans accès à cet email, votre administrateur pourra réinitialiser votre mot de passe."
+    );
     setLoading(false);
   }
 
@@ -53,8 +52,8 @@ export default function ForgotPasswordPage() {
         <CardHeader>
           <CardTitle>Mot de passe oublié</CardTitle>
           <CardDescription>
-            Saisissez votre email. Si vous êtes salarié, votre administrateur sera prévenu ; si vous
-            êtes administrateur, vous recevrez un email de réinitialisation.
+            Saisissez votre email. Vous recevrez un lien de réinitialisation si un compte y est
+            associé.
           </CardDescription>
         </CardHeader>
         {message ? (
