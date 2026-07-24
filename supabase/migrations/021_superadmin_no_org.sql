@@ -33,6 +33,9 @@ begin
 end $$;
 
 -- 3) Vues plateforme : exclusion robuste au NULL (is distinct from).
+-- On DROP d'abord car le type de retour peut différer d'une version antérieure
+-- (create or replace ne peut pas changer un type de retour).
+drop function if exists platform_overview();
 create or replace function platform_overview()
 returns table (
   organization_id uuid,
@@ -58,6 +61,7 @@ language sql security definer set search_path = public as $$
 $$;
 grant execute on function platform_overview() to authenticated;
 
+drop function if exists platform_members();
 create or replace function platform_members()
 returns table (
   id uuid,
