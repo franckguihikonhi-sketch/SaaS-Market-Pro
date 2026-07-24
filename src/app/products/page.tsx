@@ -903,8 +903,8 @@ export default function ProductsPage() {
   useEffect(() => {
     if (loading) return;
     if (!session) router.push("/login");
-    // Articles réservés au super_admin, à l'admin et au gestionnaire de stock.
-    else if (profile && !["super_admin", "admin", "warehouse_keeper"].includes(profile.role))
+    // Articles réservés au super_admin, admin, gérant et gestionnaire de stock.
+    else if (profile && !["super_admin", "admin", "manager", "warehouse_keeper"].includes(profile.role))
       router.push(profile.role === "cashier" ? "/pos" : "/dashboard");
   }, [loading, session, profile, router]);
 
@@ -943,7 +943,7 @@ export default function ProductsPage() {
     );
   }
 
-  const canWrite = ["super_admin", "admin", "warehouse_keeper"].includes(profile.role);
+  const canWrite = ["super_admin", "admin", "manager", "warehouse_keeper"].includes(profile.role);
   const hasUnits = units.length > 0;
 
   return (

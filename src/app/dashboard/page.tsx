@@ -253,7 +253,9 @@ export default function DashboardPage() {
     );
   }
 
-  const isAdmin = profile.role === "admin" || profile.role === "super_admin";
+  // Le gérant est considéré comme un administrateur (mêmes droits de gestion).
+  const isAdmin =
+    profile.role === "admin" || profile.role === "manager" || profile.role === "super_admin";
   // Seul Franck (super_admin), en maintenance sur une entreprise, peut mettre
   // ses membres en sommeil / les réveiller.
   const canSuspend = profile.role === "super_admin" && Boolean(activeOrgId);

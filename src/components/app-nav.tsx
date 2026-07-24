@@ -75,9 +75,9 @@ export function AppNav() {
       ? LINKS.filter((l) => CASHIER_LINKS.has(l.href))
       : isWarehouse
         ? LINKS.filter((l) => WAREHOUSE_LINKS.has(l.href))
-        : profile?.role === "admin"
+        : profile?.role === "admin" || profile?.role === "manager"
           ? LINKS
-          : // Gérant / comptable : pas d'accès au Stock ni aux Articles.
+          : // Comptable : pas d'accès au Stock ni aux Articles.
             LINKS.filter((l) => !STOCK_LINKS.has(l.href));
 
   async function handleSignOut() {

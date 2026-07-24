@@ -233,8 +233,8 @@ export default function StockPage() {
   useEffect(() => {
     if (loading) return;
     if (!session) router.push("/login");
-    // Stock réservé au super_admin, à l'admin et au gestionnaire de stock.
-    else if (profile && !["super_admin", "admin", "warehouse_keeper"].includes(profile.role))
+    // Stock réservé au super_admin, admin, gérant et gestionnaire de stock.
+    else if (profile && !["super_admin", "admin", "manager", "warehouse_keeper"].includes(profile.role))
       router.push(profile.role === "cashier" ? "/pos" : "/dashboard");
   }, [loading, session, profile, router]);
 

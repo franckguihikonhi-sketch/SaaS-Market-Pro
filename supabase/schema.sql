@@ -340,23 +340,23 @@ create policy "org read" on stock_movements for select using (
 -- (affiné par table dans les phases suivantes, au fur et à mesure que
 -- l'UI de gestion est construite).
 create policy "admin write" on categories for all using (
-  organization_id = my_organization_id() and my_role() in ('admin', 'super_admin', 'warehouse_keeper')
+  organization_id = my_organization_id() and my_role() in ('admin', 'manager', 'super_admin', 'warehouse_keeper')
 );
 create policy "admin write" on brands for all using (
-  organization_id = my_organization_id() and my_role() in ('admin', 'super_admin', 'warehouse_keeper')
+  organization_id = my_organization_id() and my_role() in ('admin', 'manager', 'super_admin', 'warehouse_keeper')
 );
 create policy "admin write" on units for all using (
-  organization_id = my_organization_id() and my_role() in ('admin', 'super_admin', 'warehouse_keeper')
+  organization_id = my_organization_id() and my_role() in ('admin', 'manager', 'super_admin', 'warehouse_keeper')
 );
 create policy "admin write" on products for all using (
-  organization_id = my_organization_id() and my_role() in ('admin', 'super_admin', 'warehouse_keeper')
+  organization_id = my_organization_id() and my_role() in ('admin', 'manager', 'super_admin', 'warehouse_keeper')
 );
 
 -- Un admin peut modifier le rôle des collègues de son organisation
 -- (jamais le sien, pour éviter de se retirer ses propres droits par erreur).
 create policy "admin update profiles" on profiles for update using (
   organization_id = my_organization_id()
-  and my_role() in ('admin', 'super_admin')
+  and my_role() in ('admin', 'manager', 'super_admin')
   and id <> auth.uid()
 );
 
@@ -749,7 +749,7 @@ create policy "admin write" on suppliers for all using (
 );
 create policy "admin write" on product_units for all using (
   exists (select 1 from products p where p.id = product_id and p.organization_id = my_organization_id()
-    and my_role() in ('admin', 'super_admin', 'warehouse_keeper'))
+    and my_role() in ('admin', 'manager', 'super_admin', 'warehouse_keeper'))
 );
 
 -- Le stock lui-même ne s'écrit jamais directement : uniquement via
