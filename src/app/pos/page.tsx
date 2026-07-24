@@ -756,7 +756,10 @@ export default function PosPage() {
             {/* Barre de titre */}
             <div className="flex shrink-0 items-center justify-between bg-gradient-to-b from-slate-800 to-slate-900 px-4 py-2 text-white">
               <span className="flex items-center gap-2 text-sm font-semibold tracking-wide">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                </span>
                 CAISSE — {stores.find((s) => s.id === storeId)?.name ?? "Magasin"}
               </span>
               <div className="flex gap-1.5">
